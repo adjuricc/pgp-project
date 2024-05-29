@@ -1,6 +1,8 @@
 import tkinter as tk
 import rsa
 import hashlib
+import csv
+import time
 from tkinter import messagebox
 from Crypto.Cipher import CAST
 
@@ -38,10 +40,10 @@ def generate_keys():
         tk.messagebox.showerror("Greska", "Unesite sve podatke")
     else:
         (public_key, private_key) = rsa.newkeys(int(selected_option.get()))
-        clear_window(private_key)
+        password_input(private_key, public_key)
 
 
-def password_button_click(password, private_key):
+def password_button_click(password, private_key, public_key):
     if not password.strip() or password == '.':
         tk.messagebox.showerror("Greska", "Unesite trazenu sifru.")
     else:
@@ -56,11 +58,49 @@ def password_button_click(password, private_key):
 
         ciphered_private_key = cipher.encrypt(private_key_bytes)
 
+        clear_window()
+        update_private_key_ring(email, ciphered_private_key, public_key, hashed_password)
 
+def update_private_key_ring(email, private_key, public_key, password):
+    with open('private_key_ring.csv', newline='\n') as csvfile:
+        reader = csv.reader(csvfile)
 
-def clear_window(private_key):
+        reader_lst = list(reader)
+
+        found = False
+
+        for i in range(1, len(reader_lst)):
+            if reader_lst[i][4] == email:
+                reader_lst[i][0] = time.time()
+                reader_lst[i][1] = public_key[8:]
+                reader_lst[i][2] = public_key
+                reader_lst[i][3] = private_key
+                reader_lst[i][5] = password
+
+                found = True
+
+                break
+
+    if found == False:
+        print(type(time.time()), time.time())
+        print(type(public_key[:8]), public_key[:8])
+        print(type(public_key), public_key)
+        print(type(private_key), private_key)
+        print(type(email), email)
+        print(type(password), password)
+        new_row = [str(time.time()), str(public_key[8:]), str(public_key), str(private_key), str(email), str(password)]
+        reader_lst.append(new_row)
+
+    with open('private_key_ring.csv', 'w', newline='\n') as file:
+        writer = csv.writer(file)
+        writer.writerows(reader_lst)
+
+def clear_window():
     for widget in root.winfo_children():
         widget.destroy()
+
+def password_input(private_key, public_key):
+    clear_window()
 
     password_label = tk.Label(root, text="Sifra: ")
     password_label.pack()
@@ -68,7 +108,7 @@ def clear_window(private_key):
     password = tk.Entry(root)
     password.pack()
 
-    password_button = tk.Button(root, text="Generisi kljuceve", command=lambda:password_button_click(password.get(), private_key))
+    password_button = tk.Button(root, text="Generisi kljuceve", command=lambda:password_button_click(password.get(), private_key, public_key))
     password_button.pack(pady=20)
 
     return password
