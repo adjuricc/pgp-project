@@ -2,6 +2,7 @@ import tkinter as tk
 import rsa
 import hashlib
 from tkinter import messagebox
+from Crypto.Cipher import CAST
 
 root = tk.Tk()
 
@@ -30,26 +31,34 @@ option_menu_label.pack()
 option_menu = tk.OptionMenu(root, selected_option, *options)
 option_menu.pack(pady=10)
 
+# private_key = None
+
 def generate_keys():
     if not name.get().strip() or name.get() == '.' or not email.get().strip() or email.get() == '.':
         tk.messagebox.showerror("Greska", "Unesite sve podatke")
     else:
         (public_key, private_key) = rsa.newkeys(int(selected_option.get()))
-        clear_window()
+        clear_window(private_key)
 
 
-def password_button_click(password):
+def password_button_click(password, private_key):
     if not password.strip() or password == '.':
         tk.messagebox.showerror("Greska", "Unesite trazenu sifru.")
     else:
         sha1_hash = hashlib.sha1()
         sha1_hash.update(password.encode('utf-8'))
 
-        hashed_password = sha1_hash.hexdigest()
+        hashed_password = sha1_hash.digest()
+
+        cipher = CAST.new(hashed_password[:16], CAST.MODE_OPENPGP)
+
+        private_key_bytes = rsa.key.PrivateKey.save_pkcs1(private_key)
+
+        ciphered_private_key = cipher.encrypt(private_key_bytes)
 
 
 
-def clear_window():
+def clear_window(private_key):
     for widget in root.winfo_children():
         widget.destroy()
 
@@ -59,7 +68,7 @@ def clear_window():
     password = tk.Entry(root)
     password.pack()
 
-    password_button = tk.Button(root, text="Generisi kljuceve", command=lambda:password_button_click(password.get()))
+    password_button = tk.Button(root, text="Generisi kljuceve", command=lambda:password_button_click(password.get(), private_key))
     password_button.pack(pady=20)
 
     return password
