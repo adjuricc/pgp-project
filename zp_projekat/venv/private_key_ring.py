@@ -1,2 +1,2 @@
-# class PrivateKeyRing:
-#     def __init__(self):
+class PrivateKeyRing:
+    def __init__(self):

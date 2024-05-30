@@ -6,36 +6,47 @@ import time
 from tkinter import messagebox
 from Crypto.Cipher import CAST
 
+private_key_ring = []
+public_key_ring = []
+
 root = tk.Tk()
 
 root.title("PGP")
 root.geometry("700x700")
 
-name_label = tk.Label(root, text="Ime: ")
-name_label.pack()
 
-name = tk.Entry(root)
-name.pack(pady=10)
 
-email_label = tk.Label(root, text="Imejl: ")
-email_label.pack()
+def login():
+    clear_window()
 
-email = tk.Entry(root)
-email.pack(pady=10)
+    name_label = tk.Label(root, text="Ime: ")
+    name_label.pack()
 
-options = ["1024", "2048"]
-selected_option = tk.StringVar()
-selected_option.set(options[0])
+    name = tk.Entry(root)
+    name.pack(pady=10)
 
-option_menu_label = tk.Label(root, text="Velicina kljuca:")
-option_menu_label.pack()
+    email_label = tk.Label(root, text="Imejl: ")
+    email_label.pack()
 
-option_menu = tk.OptionMenu(root, selected_option, *options)
-option_menu.pack(pady=10)
+    email = tk.Entry(root)
+    email.pack(pady=10)
+
+    options = ["1024", "2048"]
+    selected_option = tk.StringVar()
+    selected_option.set(options[0])
+
+    option_menu_label = tk.Label(root, text="Velicina kljuca:")
+    option_menu_label.pack()
+
+    option_menu = tk.OptionMenu(root, selected_option, *options)
+    option_menu.pack(pady=10)
+
+    submit_button = tk.Button(root, text="Generisi kljuceve", command=lambda: generate_keys(name, email, selected_option))
+    submit_button.pack(pady=20)
 
 # private_key = None
 
-def generate_keys():
+def generate_keys(name, email, selected_option):
     if not name.get().strip() or name.get() == '.' or not email.get().strip() or email.get() == '.':
         tk.messagebox.showerror("Greska", "Unesite sve podatke")
     else:
@@ -61,39 +72,71 @@ def password_button_click(password, private_key, public_key, email):
 
         clear_window()
         update_private_key_ring(email, ciphered_private_key, public_key, hashed_password)
+        update_public_key_ring(email, public_key)
+        submit_button = tk.Button(root, text="Generisi kljuceve", command=login)
+        submit_button.pack(pady=20)
+
 
 def update_private_key_ring(email, private_key, public_key, password):
     # public_key_bytes = rsa.key.PublicKey.save_pkcs1(public_key)
     der_public_key = public_key.save_pkcs1(format='DER')
     least_significant_8_bytes = der_public_key[-8:]
 
-    with open('private_key_ring.csv', newline='\n') as csvfile:
-        reader = csv.reader(csvfile)
+    found = False
 
-        reader_lst = list(reader)
+    for i in range(0, len(private_key_ring)):
+        if private_key_ring[i]["email"] == email:
+            private_key_ring[i]["timestamp"] = time.time()
+            private_key_ring[i]["key_id"] = least_significant_8_bytes
+            private_key_ring[i]["public_key"] = public_key
+            private_key_ring[i]["private_key"] = private_key
+            private_key_ring[i]["password"] = password
 
-        found = False
+            found = True
 
-        for i in range(1, len(reader_lst)):
-            if reader_lst[i][4] == email:
-                reader_lst[i][0] = time.time()
-                reader_lst[i][1] = least_significant_8_bytes
-                reader_lst[i][2] = public_key
-                reader_lst[i][3] = private_key
-                reader_lst[i][5] = password
-
-                found = True
-
-                break
+            break
 
     if found == False:
-        print(type(email), email)
-        new_row = [str(time.time()), str(least_significant_8_bytes), str(public_key), str(private_key), str(email), str(password)]
-        reader_lst.append(new_row)
+        my_dict = {}
 
-    with open('private_key_ring.csv', 'w', newline='\n') as file:
-        writer = csv.writer(file)
-        writer.writerows(reader_lst)
+        my_dict["timestamp"] = time.time()
+        my_dict["key_id"] = least_significant_8_bytes
+        my_dict["public_key"] = public_key
+        my_dict["private_key"] = private_key
+        my_dict["email"] = email
+        my_dict["password"] = password
+
+        private_key_ring.append(my_dict)
+
+    print(private_key_ring)
+
+def update_public_key_ring(email, public_key):
+    der_public_key = public_key.save_pkcs1(format='DER')
+    least_significant_8_bytes = der_public_key[-8:]
+
+    found = False
+
+    for i in range(0, len(public_key_ring)):
+        if public_key_ring[i]["email"] == email:
+            public_key_ring[i]["timestamp"] = time.time()
+            public_key_ring[i]["key_id"] = least_significant_8_bytes
+            public_key_ring[i]["public_key"] = public_key
+
+            found = True
+
+            break
+
+    if found == False:
+        my_dict = {}
+
+        my_dict["timestamp"] = time.time()
+        my_dict["key_id"] = least_significant_8_bytes
+        my_dict["public_key"] = public_key
+        my_dict["email"] = email
+
+        public_key_ring.append(my_dict)
+
+    print(public_key_ring)
 
 def clear_window():
     for widget in root.winfo_children():
@@ -114,9 +157,8 @@ def password_input(private_key, public_key, email):
 
     return password
 
-submit_button = tk.Button(root, text="Generisi kljuceve", command=generate_keys)
-submit_button.pack(pady=20)
 
 
 
+login()
 root.mainloop()
