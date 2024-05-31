@@ -1,10 +1,13 @@
 import tkinter as tk
 import rsa
 import hashlib
-import csv
 import time
-from tkinter import messagebox
+import re
+from tkinter import messagebox, filedialog
 from Crypto.Cipher import CAST
+import pem
+import base64
+
 
 private_key_ring = []
 public_key_ring = []
@@ -13,7 +16,6 @@ root = tk.Tk()
 
 root.title("PGP")
 root.geometry("700x700")
-
 
 
 def login():
@@ -44,18 +46,81 @@ def login():
     submit_button = tk.Button(root, text="Generisi kljuceve", command=lambda: generate_keys(name, email, selected_option))
     submit_button.pack(pady=20)
 
-# private_key = None
+    import_key_button = tk.Button(root, text="Uvezi kljuc", command=lambda: import_key(name, email))
+    import_key_button.pack(pady=20)
+
+
+def add_padding(base64_string):
+    missing_padding = len(base64_string) % 4
+    if missing_padding != 0:
+        base64_string += '=' * (4 - missing_padding)
+    return base64_string
+
+
+def import_key(name, email):
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.fullmatch(pattern, email.get()):
+        tk.messagebox.showerror("Greska", "Mejl nije u dobrom formatu")
+    elif not name.get().strip() or name.get() == '.' or not email.get().strip() or email.get() == '.':
+        tk.messagebox.showerror("Greska", "Unesite sve podatke")
+    else:
+        file_path = filedialog.askopenfilename(
+            title="Odaberi fajl",
+            filetypes=(("Tekst fajlovi", "*.txt"), ("Svi fajlovi", "*.*"))
+        )
+
+        if file_path:
+            pem_file = pem.parse_file(file_path)
+            found = False
+            user = None
+
+            if len(pem_file) == 1:
+                for elem in private_key_ring:
+                    if elem["email"] == email.get():
+                        found = True
+                        user = elem
+                        break
+
+                if not found:
+                    tk.messagebox.showerror("Greska", "Nepostojeci korisnik!")
+                else:
+                    public_key_pem = pem_file[0].as_bytes()
+                    public_key_object = rsa.PublicKey.load_pkcs1(public_key_pem, format='PEM')
+
+                    update_private_key_ring(user["email"], user["private_key"], public_key_object, user["password"])
+                    update_public_key_ring(user["email"], public_key_object)
+            else:
+                private_key_pem = pem_file[1].as_bytes()
+                private_key_object = rsa.PublicKey.load_pkcs1(private_key_pem, format='PEM')
+
+                public_key_pem = pem_file[1].as_bytes()
+                public_key_object = rsa.PublicKey.load_pkcs1(public_key_pem, format='PEM')
+
+                password_input(private_key_object, public_key_object, email)
+
+
+def export_keys_pem(private_key, public_key, name):
+    private_key_pem = private_key.save_pkcs1().decode('utf-8')
+    public_key_pem = public_key.save_pkcs1().decode('utf-8')
+
+    with open(name + ".pem", 'w') as priv_file:
+        priv_file.write(private_key_pem)
+        priv_file.write(public_key_pem)
+
 
 def generate_keys(name, email, selected_option):
-    if not name.get().strip() or name.get() == '.' or not email.get().strip() or email.get() == '.':
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.fullmatch(pattern, email.get()):
+        tk.messagebox.showerror("Greska", "Mejl nije u dobrom formatu")
+    elif not name.get().strip() or name.get() == '.' or not email.get().strip() or email.get() == '.':
         tk.messagebox.showerror("Greska", "Unesite sve podatke")
     else:
         (public_key, private_key) = rsa.newkeys(int(selected_option.get()))
+        export_keys_pem(private_key, public_key, name.get())
         password_input(private_key, public_key, email)
 
 
 def password_button_click(password, private_key, public_key, email):
-    print(email)
     if not password.strip() or password == '.':
         tk.messagebox.showerror("Greska", "Unesite trazenu sifru.")
     else:
@@ -73,7 +138,7 @@ def password_button_click(password, private_key, public_key, email):
         clear_window()
         update_private_key_ring(email, ciphered_private_key, public_key, hashed_password)
         update_public_key_ring(email, public_key)
-        submit_button = tk.Button(root, text="Generisi kljuceve", command=login)
+        submit_button = tk.Button(root, text="Vrati se nazad", command=login)
         submit_button.pack(pady=20)
 
 
@@ -110,6 +175,7 @@ def update_private_key_ring(email, private_key, public_key, password):
 
     print(private_key_ring)
 
+
 def update_public_key_ring(email, public_key):
     der_public_key = public_key.save_pkcs1(format='DER')
     least_significant_8_bytes = der_public_key[-8:]
@@ -138,9 +204,11 @@ def update_public_key_ring(email, public_key):
 
     print(public_key_ring)
 
+
 def clear_window():
     for widget in root.winfo_children():
         widget.destroy()
+
 
 def password_input(private_key, public_key, email):
     email_get = email.get()
@@ -152,12 +220,10 @@ def password_input(private_key, public_key, email):
     password = tk.Entry(root)
     password.pack()
 
-    password_button = tk.Button(root, text="Generisi kljuceve", command=lambda:password_button_click(password.get(), private_key, public_key, email_get))
+    password_button = tk.Button(root, text="Enkriputj privatni kljuc", command=lambda:password_button_click(password.get(), private_key, public_key, email_get))
     password_button.pack(pady=20)
 
     return password
-
-
 
 
 login()
