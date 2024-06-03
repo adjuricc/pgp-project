@@ -92,8 +92,8 @@ def import_key(name, email):
 
                     return None, public_key_object
             else:
-                private_key_pem = pem_file[1].as_bytes()
-                private_key_object = rsa.PublicKey.load_pkcs1(private_key_pem, format='PEM')
+                private_key_pem = pem_file[0].as_bytes()
+                private_key_object = rsa.PrivateKey.load_pkcs1(private_key_pem, format='PEM')
 
                 public_key_pem = pem_file[1].as_bytes()
                 public_key_object = rsa.PublicKey.load_pkcs1(public_key_pem, format='PEM')
@@ -104,11 +104,13 @@ def import_key(name, email):
 
 
 def export_keys_pem(private_key, public_key, name):
-    private_key_pem = private_key.save_pkcs1().decode('utf-8')
+    if private_key:
+        private_key_pem = private_key.save_pkcs1().decode('utf-8')
     public_key_pem = public_key.save_pkcs1().decode('utf-8')
 
     with open(name + ".pem", 'w') as priv_file:
-        priv_file.write(private_key_pem)
+        if private_key:
+            priv_file.write(private_key_pem)
         priv_file.write(public_key_pem)
 
 
@@ -138,7 +140,9 @@ def check_password(password, email, private_key, new_window):
                 ciphertext = private_key_bytes[CAST.block_size + 2:]
                 cipher = CAST.new(hashed_password[:16], CAST.MODE_OPENPGP, eiv)
                 decrypted_key = cipher.decrypt(ciphertext)
-                print(decrypted_key)
+
+                name_label = tk.Label(new_window, text=decrypted_key)
+                name_label.pack()
 
 
 def on_cell_click(event, table):
@@ -146,12 +150,13 @@ def on_cell_click(event, table):
 
     if row_id:
         item = table.item(row_id)
+        print(item)
         email = item['values'][0]
         private_key = item['values'][2]
 
         new_window = tk.Toplevel()
         new_window.title("Sifra za privatni kljuc")
-        new_window.geometry("400x400")
+        new_window.geometry("600x400")
 
         password_label = tk.Label(new_window, text="Sifra: ")
         password_label.pack()
@@ -182,6 +187,8 @@ def password_button_click(password, email, selected_option, name, key_size):
         clear_window()
 
         if private_key:
+            print("privatni kljuc: ")
+            print(private_key)
             private_key_bytes = rsa.key.PrivateKey.save_pkcs1(private_key)
 
             ciphered_private_key = cipher.encrypt(private_key_bytes)
@@ -207,6 +214,19 @@ def password_button_click(password, email, selected_option, name, key_size):
         table.pack()
 
         table.bind('<ButtonRelease-1>', lambda event: on_cell_click(event, table))
+
+        export_options = ["Privatni i javni kljuc", "Javni kljuc"]
+        export_selected_option = tk.StringVar()
+        export_selected_option.set(export_options[0])
+
+        option_menu_export_label = tk.Label(root, text="Izaberite nacin izvoza kljuceva:")
+        option_menu_export_label.pack()
+
+        option_menu_export = tk.OptionMenu(root, export_selected_option, *export_options)
+        option_menu_export.pack(pady=10)
+
+        export_button = tk.Button(root, text="Izvezi kljuceve", command=lambda: export_keys_pem(private_key if export_selected_option.get() == "Privatni i javni kljuc" else None, public_key, name))
+        export_button.pack(pady=20)
 
         submit_button = tk.Button(root, text="Vrati se nazad", command=login)
         submit_button.pack(pady=20)
