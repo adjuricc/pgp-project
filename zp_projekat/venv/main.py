@@ -12,10 +12,11 @@ import ast
 
 from Crypto.Util.Padding import unpad
 
-private_key_ring = []
-public_key_ring = []
+private_key_ring = {}
+public_key_ring = {}
 users = []
 logged_user = None
+generated_keys = None
 
 root = tk.Tk()
 
@@ -58,10 +59,11 @@ def register():
     # option_menu = tk.OptionMenu(root, selected_option, *options)
     # option_menu.pack(pady=10)
 
-    register_click_button = tk.Button(root, text="Register", command=lambda:register_click(name.get(), email.get(), password.get()))
+    register_click_button = tk.Button(root, text="Register user", command=lambda:register_click(name.get(), email.get(), password.get()))
     register_click_button.pack(pady=20)
 
 def register_click(name, email, password):
+    global  logged_user
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
 
     msg_label = tk.Label(root)
@@ -95,20 +97,11 @@ def login():
     password.pack(pady=10)
 
 
-    # options = ["1024", "2048"]
-    # selected_option = tk.StringVar()
-    # selected_option.set(options[0])
-    #
-    # option_menu_label = tk.Label(root, text="Velicina kljuca:")
-    # option_menu_label.pack()
-    #
-    # option_menu = tk.OptionMenu(root, selected_option, *options)
-    # option_menu.pack(pady=10)
-
     login_click_button = tk.Button(root, text="Dalje", command=lambda:login_click(email.get(), password.get()))
     login_click_button.pack(pady=20)
 
 def login_click(email, password):
+    global logged_user
     if not email.strip() or email == '.' or not password.strip() or password == '.':
         msg_label.config(text="All fields are mandatory.")
     hashed_password = password_hashing(password)
@@ -129,11 +122,87 @@ def login_click(email, password):
         msg_label.config(text="You successfully logged in!")
     msg_label.pack()
 
+def log_out():
+    global logged_user
+    logged_user = None
+
+def generate_keys():
+    global logged_user
+    clear_window()
+
+    msg_label = tk.Label(root)
+
+    # print(logged_user)
+
+    if logged_user == None:
+        msg_label.config(text="You are not logged in.")
+
+    msg_label.pack()
+
+    options = ["1024", "2048"]
+    selected_option = tk.StringVar()
+    selected_option.set(options[0])
+
+    option_menu_label = tk.Label(root, text="Velicina kljuca:")
+    option_menu_label.pack()
+
+    option_menu = tk.OptionMenu(root, selected_option, *options)
+    option_menu.pack(pady=10)
+
+    generate_keys_click_button = tk.Button(root, text="Next", command=lambda: generate_keys_click(selected_option.get()))
+    generate_keys_click_button.pack(pady=20)
+
+    #export_keys_pem(private_key, public_key, name.get())
+    #password_input(private_key, public_key, email)
+
+def generate_keys_click(selected_option):
+    global logged_user
+    public_key, private_key = rsa.newkeys(int(selected_option))
+
+    cipher = CAST.new(logged_user["password"][:16], CAST.MODE_OPENPGP)
+    private_key_bytes = rsa.key.PrivateKey.save_pkcs1(private_key)
+    ciphered_private_key = cipher.encrypt(private_key_bytes)
+
+    update_private_key_ring(logged_user["email"], ciphered_private_key, public_key, logged_user["password"])
+
+def update_private_key_ring(email, private_key, public_key, password):
+    # public_key_bytes = rsa.key.PublicKey.save_pkcs1(public_key)
+    der_public_key = public_key.save_pkcs1(format='DER')
+    least_significant_8_bytes = der_public_key[-8:]
+
+    found = False
+
+    if email in private_key_ring:
+        private_key_ring[email]["timestamp"] = time.time()
+        private_key_ring[email]["key_id"] = least_significant_8_bytes
+        private_key_ring[email]["public_key"] = public_key
+        private_key_ring[email]["private_key"] = private_key
+        private_key_ring[email]["password"] = password
+
+        found = True
+
+    if not found:
+        my_dict = {}
+
+        my_dict["timestamp"] = time.time()
+        my_dict["key_id"] = least_significant_8_bytes
+        my_dict["public_key"] = public_key
+        my_dict["private_key"] = private_key
+        my_dict["email"] = email
+        my_dict["password"] = password
+
+        private_key_ring[email] = my_dict
+
+    print(private_key_ring)
+
+
 def password_hashing(password):
     sha1_hash = hashlib.sha1()
     sha1_hash.update(password.encode('utf-8'))
 
     hashed_password = sha1_hash.digest()
+
+    return hashed_password
 
 def add_padding(base64_string):
     missing_padding = len(base64_string) % 4
@@ -199,16 +268,7 @@ def export_keys_pem(private_key, public_key, name):
         priv_file.write(public_key_pem)
 
 
-def generate_keys(name, email, selected_option):
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    if not re.fullmatch(pattern, email):
-        tk.messagebox.showerror("Greska", "Mejl nije u dobrom formatu")
-    elif not name.strip() or name == '.' or not email.strip() or email == '.':
-        tk.messagebox.showerror("Greska", "Unesite sve podatke")
-    else:
-        return rsa.newkeys(int(selected_option))
-        #export_keys_pem(private_key, public_key, name.get())
-        #password_input(private_key, public_key, email)
+
 
 
 def check_password(password, email, private_key, new_window):
@@ -317,38 +377,6 @@ def password_button_click(password, email, selected_option, name, key_size):
         submit_button.pack(pady=20)
 
 
-def update_private_key_ring(email, private_key, public_key, password):
-    # public_key_bytes = rsa.key.PublicKey.save_pkcs1(public_key)
-    der_public_key = public_key.save_pkcs1(format='DER')
-    least_significant_8_bytes = der_public_key[-8:]
-
-    found = False
-
-    for i in range(0, len(private_key_ring)):
-        if private_key_ring[i]["email"] == email:
-            private_key_ring[i]["timestamp"] = time.time()
-            private_key_ring[i]["key_id"] = least_significant_8_bytes
-            private_key_ring[i]["public_key"] = public_key
-            private_key_ring[i]["private_key"] = private_key
-            private_key_ring[i]["password"] = password
-
-            found = True
-
-            break
-
-    if not found:
-        my_dict = {}
-
-        my_dict["timestamp"] = time.time()
-        my_dict["key_id"] = least_significant_8_bytes
-        my_dict["public_key"] = public_key
-        my_dict["private_key"] = private_key
-        my_dict["email"] = email
-        my_dict["password"] = password
-
-        private_key_ring.append(my_dict)
-
-    print(private_key_ring)
 
 
 def update_public_key_ring(email, public_key):
@@ -385,7 +413,7 @@ def clear_window():
         # print(widget.winfo_class())
         # if widget.winfo_class() == 'Button':
         #     print(widget.cget("text"))
-        if widget.winfo_class() == 'Button' and (widget.cget("text") == 'Register' or widget.cget("text") == 'Login'):
+        if widget.winfo_class() == 'Button' and (widget.cget("text") == 'Register' or widget.cget("text") == 'Login' or widget.cget("text") == 'Generate keys' or widget.cget("text") == 'Log out'):
             continue
         widget.destroy()
 
@@ -423,7 +451,10 @@ register_button.pack(pady=20)
 login_button = tk.Button(root, text="Login", command=login)
 login_button.pack(pady=20)
 
-generate_keys_button = tk.Button(root, text="Generate keys", command=login)
+generate_keys_button = tk.Button(root, text="Generate keys", command=generate_keys)
 generate_keys_button.pack(pady=20)
+
+log_out_button = tk.Button(root, text="Log out", command=log_out)
+log_out_button.pack(pady=20)
 
 root.mainloop()
