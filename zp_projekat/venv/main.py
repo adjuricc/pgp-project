@@ -14,6 +14,8 @@ from Crypto.Util.Padding import unpad
 
 private_key_ring = []
 public_key_ring = []
+users = []
+logged_user = None
 
 root = tk.Tk()
 
@@ -21,14 +23,64 @@ root.title("PGP")
 root.geometry("700x700")
 
 
-def login():
+
+
+def register():
     clear_window()
 
-    name_label = tk.Label(root, text="Ime: ")
+    name_label = tk.Label(root, text="Name: ")
     name_label.pack()
 
     name = tk.Entry(root)
     name.pack(pady=10)
+
+    email_label = tk.Label(root, text="Email: ")
+    email_label.pack()
+
+    email = tk.Entry(root)
+    email.pack(pady=10)
+
+    password_label = tk.Label(root, text="Password: ")
+    password_label.pack()
+
+    password = tk.Entry(root, show="*")
+    password.pack(pady=10)
+
+
+
+    # options = ["1024", "2048"]
+    # selected_option = tk.StringVar()
+    # selected_option.set(options[0])
+    #
+    # option_menu_label = tk.Label(root, text="Velicina kljuca:")
+    # option_menu_label.pack()
+    #
+    # option_menu = tk.OptionMenu(root, selected_option, *options)
+    # option_menu.pack(pady=10)
+
+    register_click_button = tk.Button(root, text="Register", command=lambda:register_click(name.get(), email.get(), password.get()))
+    register_click_button.pack(pady=20)
+
+def register_click(name, email, password):
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+
+    msg_label = tk.Label(root)
+
+    if not name.strip() or name == '.' or not email.strip() or email == '.' or not password.strip() or password == '.':
+        msg_label.config(text="All fields are mandatory.")
+    elif not re.fullmatch(pattern, email):
+        msg_label.config(text="Invalid format for email address.")
+    else:
+        hashed_password = password_hashing(password)
+
+        logged_user = {"name": name, "email": email, "password": hashed_password}
+
+        users.append(logged_user)
+
+    msg_label.pack(pady=10)
+
+def login():
+    clear_window()
 
     email_label = tk.Label(root, text="Imejl: ")
     email_label.pack()
@@ -36,19 +88,52 @@ def login():
     email = tk.Entry(root)
     email.pack(pady=10)
 
-    options = ["1024", "2048"]
-    selected_option = tk.StringVar()
-    selected_option.set(options[0])
+    password_label = tk.Label(root, text="Password: ")
+    password_label.pack()
 
-    option_menu_label = tk.Label(root, text="Velicina kljuca:")
-    option_menu_label.pack()
+    password = tk.Entry(root, show="*")
+    password.pack(pady=10)
 
-    option_menu = tk.OptionMenu(root, selected_option, *options)
-    option_menu.pack(pady=10)
 
-    next_button = tk.Button(root, text="Dalje", command=lambda:password_input(name.get(), email, selected_option.get()))
-    next_button.pack(pady=20)
+    # options = ["1024", "2048"]
+    # selected_option = tk.StringVar()
+    # selected_option.set(options[0])
+    #
+    # option_menu_label = tk.Label(root, text="Velicina kljuca:")
+    # option_menu_label.pack()
+    #
+    # option_menu = tk.OptionMenu(root, selected_option, *options)
+    # option_menu.pack(pady=10)
 
+    login_click_button = tk.Button(root, text="Dalje", command=lambda:login_click(email.get(), password.get()))
+    login_click_button.pack(pady=20)
+
+def login_click(email, password):
+    if not email.strip() or email == '.' or not password.strip() or password == '.':
+        msg_label.config(text="All fields are mandatory.")
+    hashed_password = password_hashing(password)
+
+    found = False
+
+    msg_label = tk.Label(root)
+
+    for user in users:
+        if user["email"] == email and user["password"] == hashed_password:
+            logged_user = user
+            found = True
+            break
+
+    if not found:
+        msg_label.config(text="User not found. Try again!")
+    else:
+        msg_label.config(text="You successfully logged in!")
+    msg_label.pack()
+
+def password_hashing(password):
+    sha1_hash = hashlib.sha1()
+    sha1_hash.update(password.encode('utf-8'))
+
+    hashed_password = sha1_hash.digest()
 
 def add_padding(base64_string):
     missing_padding = len(base64_string) % 4
@@ -228,7 +313,7 @@ def password_button_click(password, email, selected_option, name, key_size):
         export_button = tk.Button(root, text="Izvezi kljuceve", command=lambda: export_keys_pem(private_key if export_selected_option.get() == "Privatni i javni kljuc" else None, public_key, name))
         export_button.pack(pady=20)
 
-        submit_button = tk.Button(root, text="Vrati se nazad", command=login)
+        submit_button = tk.Button(root, text="Vrati se nazad", command=register)
         submit_button.pack(pady=20)
 
 
@@ -297,6 +382,11 @@ def update_public_key_ring(email, public_key):
 
 def clear_window():
     for widget in root.winfo_children():
+        # print(widget.winfo_class())
+        # if widget.winfo_class() == 'Button':
+        #     print(widget.cget("text"))
+        if widget.winfo_class() == 'Button' and (widget.cget("text") == 'Register' or widget.cget("text") == 'Login'):
+            continue
         widget.destroy()
 
 
@@ -326,5 +416,14 @@ def password_input(name, email, key_size):
     return password
 
 
-login()
+# login()
+register_button = tk.Button(root, text="Register", command=register)
+register_button.pack(pady=20)
+
+login_button = tk.Button(root, text="Login", command=login)
+login_button.pack(pady=20)
+
+generate_keys_button = tk.Button(root, text="Generate keys", command=login)
+generate_keys_button.pack(pady=20)
+
 root.mainloop()
