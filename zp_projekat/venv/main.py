@@ -29,11 +29,21 @@ root.geometry("700x700")
 def register():
     clear_window()
 
+    # name_frame = tk.Frame(root)
+    # name_frame.pack(pady=10)
+    #
+    # name_label = tk.Label(name_frame, text="Name: ")
+    # name_label.pack(side=tk.LEFT)
+    #
+    # name = tk.Entry(name_frame)
+    # name.pack(side=tk.LEFT)
+
     name_label = tk.Label(root, text="Name: ")
     name_label.pack()
 
     name = tk.Entry(root)
     name.pack(pady=10)
+
 
     email_label = tk.Label(root, text="Email: ")
     email_label.pack()
@@ -46,18 +56,6 @@ def register():
 
     password = tk.Entry(root, show="*")
     password.pack(pady=10)
-
-
-
-    # options = ["1024", "2048"]
-    # selected_option = tk.StringVar()
-    # selected_option.set(options[0])
-    #
-    # option_menu_label = tk.Label(root, text="Velicina kljuca:")
-    # option_menu_label.pack()
-    #
-    # option_menu = tk.OptionMenu(root, selected_option, *options)
-    # option_menu.pack(pady=10)
 
     register_click_button = tk.Button(root, text="Register user", command=lambda:register_click(name.get(), email.get(), password.get()))
     register_click_button.pack(pady=20)
@@ -410,11 +408,10 @@ def update_public_key_ring(email, public_key):
 
 def clear_window():
     for widget in root.winfo_children():
-        # print(widget.winfo_class())
-        # if widget.winfo_class() == 'Button':
-        #     print(widget.cget("text"))
-        if widget.winfo_class() == 'Button' and (widget.cget("text") == 'Register' or widget.cget("text") == 'Login' or widget.cget("text") == 'Generate keys' or widget.cget("text") == 'Log out'):
+        if widget.winfo_class() == 'Frame':
             continue
+        # if widget.winfo_class() == 'Button' and (widget.cget("text") == 'Register' or widget.cget("text") == 'Login' or widget.cget("text") == 'Generate keys' or widget.cget("text") == 'Log out'):
+        #     continue
         widget.destroy()
 
 
@@ -445,16 +442,25 @@ def password_input(name, email, key_size):
 
 
 # login()
-register_button = tk.Button(root, text="Register", command=register)
-register_button.pack(pady=20)
+button_frame = tk.Frame(root)
+button_frame.pack(side=tk.TOP, pady=10)
 
-login_button = tk.Button(root, text="Login", command=login)
-login_button.pack(pady=20)
+register_button = tk.Button(button_frame, text="Register", command=register)
+register_button.pack(side=tk.LEFT, padx=5, pady=10)
 
-generate_keys_button = tk.Button(root, text="Generate keys", command=generate_keys)
-generate_keys_button.pack(pady=20)
+login_button = tk.Button(button_frame, text="Login", command=login)
+login_button.pack(side=tk.LEFT, padx=5, pady=10)
 
-log_out_button = tk.Button(root, text="Log out", command=log_out)
-log_out_button.pack(pady=20)
+generate_keys_button = tk.Button(button_frame, text="Generate keys", command=generate_keys)
+generate_keys_button.pack(side=tk.LEFT, padx=5, pady=10)
+
+import_keys_button = tk.Button(button_frame, text="Import keys", command=generate_keys)
+import_keys_button.pack(side=tk.LEFT, padx=5, pady=10)
+
+export_keys_button = tk.Button(button_frame, text="Export keys", command=generate_keys)
+export_keys_button.pack(side=tk.LEFT, padx=5, pady=10)
+
+log_out_button = tk.Button(button_frame, text="Log out", command=log_out)
+log_out_button.pack(side=tk.LEFT, padx=5, pady=10)
 
 root.mainloop()
