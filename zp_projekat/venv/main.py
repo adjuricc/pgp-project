@@ -209,12 +209,13 @@ def add_padding(base64_string):
     return base64_string
 
 
-def import_key(name, email):
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    if not re.fullmatch(pattern, email):
-        tk.messagebox.showerror("Greska", "Mejl nije u dobrom formatu")
-    elif not name.strip() or name == '.' or not email.strip() or email == '.':
-        tk.messagebox.showerror("Greska", "Unesite sve podatke")
+def import_key():
+    global logged_user
+
+    msg_label = tk.Label(root)
+
+    if not logged_user:
+        msg_label.config(text="User must be logged in.")
     else:
         file_path = filedialog.askopenfilename(
             title="Odaberi fajl",
@@ -226,33 +227,50 @@ def import_key(name, email):
             found = False
             user = None
 
+            for elem in private_key_ring.items():
+                if elem[0] == logged_user["email"]:
+                    found = True
+                    user = elem[1]
+                    break
+
+            if not found:
+                msg_label.config(text="User not found.")
+                return
+
+            # nemamo slucaj ako je import kljuceva zapravo prvo dodavanje kljuceva u sistem
+            # sta se onda radi za private key ako korisnik zeli da importuje samo public key ?
+            # kad importujemo i public i private key, da li treba da zatrazimo unos lozinke u sistem
+            # kako bi se proverilo zbog menjanja tajnog kljuca?
             if len(pem_file) == 1:
-                for elem in private_key_ring:
-                    if elem["email"] == email:
-                        found = True
-                        user = elem
-                        break
+                public_key_pem = pem_file[0].as_bytes()
+                public_key_object = rsa.PublicKey.load_pkcs1(public_key_pem, format='PEM')
 
-                if not found:
-                    tk.messagebox.showerror("Greska", "Nepostojeci korisnik!")
-                else:
-                    public_key_pem = pem_file[0].as_bytes()
-                    public_key_object = rsa.PublicKey.load_pkcs1(public_key_pem, format='PEM')
+                update_private_key_ring(user["email"], user["private_key"], public_key_object, user["password"])
+                # update_public_key_ring(user["email"], public_key_object)
+                print(private_key_ring)
 
-                    update_private_key_ring(user["email"], user["private_key"], public_key_object, user["password"])
-                    update_public_key_ring(user["email"], public_key_object)
+                return None, public_key_object
 
-                    return None, public_key_object
             else:
                 private_key_pem = pem_file[0].as_bytes()
+                # moramo da sifrujemo private key
                 private_key_object = rsa.PrivateKey.load_pkcs1(private_key_pem, format='PEM')
+
+                # DODALA SAM SIFROVANJE PRIVATNOG KLJUCA
+                cipher = CAST.new(logged_user["password"][:16], CAST.MODE_OPENPGP)
+                private_key_bytes = rsa.key.PrivateKey.save_pkcs1(private_key_object)
+                ciphered_private_key = cipher.encrypt(private_key_bytes)
 
                 public_key_pem = pem_file[1].as_bytes()
                 public_key_object = rsa.PublicKey.load_pkcs1(public_key_pem, format='PEM')
 
+                # ovoga nije bilo ??? mi nismo ni menjali private key ring kad dodaje oba ???
+                update_private_key_ring(user["email"], ciphered_private_key, public_key_object, user["password"])
+                print(private_key_ring)
                 #password_input(private_key_object, public_key_object, email)
 
-                return private_key_object, public_key_object
+                return ciphered_private_key, public_key_object
+    msg_label.pack(pady=10)
 
 
 def export_keys_pem(private_key, public_key, name):
@@ -293,7 +311,6 @@ def on_cell_click(event, table):
 
     if row_id:
         item = table.item(row_id)
-        print(item)
         email = item['values'][0]
         private_key = item['values'][2]
 
@@ -403,7 +420,6 @@ def update_public_key_ring(email, public_key):
 
         public_key_ring.append(my_dict)
 
-    print(public_key_ring)
 
 
 def clear_window():
@@ -454,7 +470,7 @@ login_button.pack(side=tk.LEFT, padx=5, pady=10)
 generate_keys_button = tk.Button(button_frame, text="Generate keys", command=generate_keys)
 generate_keys_button.pack(side=tk.LEFT, padx=5, pady=10)
 
-import_keys_button = tk.Button(button_frame, text="Import keys", command=generate_keys)
+import_keys_button = tk.Button(button_frame, text="Import keys", command= import_key)
 import_keys_button.pack(side=tk.LEFT, padx=5, pady=10)
 
 export_keys_button = tk.Button(button_frame, text="Export keys", command=generate_keys)
