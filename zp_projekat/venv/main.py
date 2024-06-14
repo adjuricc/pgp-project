@@ -5,6 +5,7 @@ import time
 import re
 from tkinter import messagebox, filedialog, ttk
 from Crypto.Cipher import CAST
+from Crypto.PublicKey import RSA
 import pem
 import base64
 import ast
@@ -212,6 +213,8 @@ def add_padding(base64_string):
 def import_key():
     global logged_user
 
+    clear_window()
+
     msg_label = tk.Label(root)
 
     if not logged_user:
@@ -272,6 +275,51 @@ def import_key():
                 return ciphered_private_key, public_key_object
     msg_label.pack(pady=10)
 
+def export_keys():
+    global logged_user
+
+    clear_window()
+
+    msg_label = tk.Label(root)
+
+    if not logged_user:
+        msg_label.config(text="User must be logged in.")
+    else:
+
+        found = False
+        user = None
+
+        for elem in private_key_ring.items():
+            if elem[0] == logged_user["email"]:
+                found = True
+                user = elem[1]
+                break
+
+        export_options = ["Private and public keys", "Public key"]
+        export_selected_option = tk.StringVar()
+        export_selected_option.set(export_options[0])
+
+        option_menu_export_label = tk.Label(root, text="Choose how you want keys to be exported:")
+        option_menu_export_label.pack()
+
+        option_menu_export = tk.OptionMenu(root, export_selected_option, *export_options)
+        option_menu_export.pack(pady=10)
+
+        # da li treba pitati za sifru u slucaju exportovanja privatnog kljuca?
+        eiv = user["private_key"][:CAST.block_size + 2]
+        ciphertext = user["private_key"][CAST.block_size + 2:]
+        cipher = CAST.new(logged_user["password"][:16], CAST.MODE_OPENPGP, eiv)
+        decrypted_key = cipher.decrypt(ciphertext)
+
+        private_key_object = rsa.PrivateKey.load_pkcs1(decrypted_key, format='PEM')
+        # print(private_key_object)
+
+        export_button = tk.Button(root, text="Export", command=lambda: export_keys_pem(
+            private_key_object if export_selected_option.get() == "Private and public keys" else None, user["public_key"], logged_user["name"]))
+        export_button.pack(pady=20)
+
+    msg_label.pack(pady=10)
+
 
 def export_keys_pem(private_key, public_key, name):
     if private_key:
@@ -282,8 +330,6 @@ def export_keys_pem(private_key, public_key, name):
         if private_key:
             priv_file.write(private_key_pem)
         priv_file.write(public_key_pem)
-
-
 
 
 
@@ -473,7 +519,7 @@ generate_keys_button.pack(side=tk.LEFT, padx=5, pady=10)
 import_keys_button = tk.Button(button_frame, text="Import keys", command= import_key)
 import_keys_button.pack(side=tk.LEFT, padx=5, pady=10)
 
-export_keys_button = tk.Button(button_frame, text="Export keys", command=generate_keys)
+export_keys_button = tk.Button(button_frame, text="Export keys", command=export_keys)
 export_keys_button.pack(side=tk.LEFT, padx=5, pady=10)
 
 log_out_button = tk.Button(button_frame, text="Log out", command=log_out)
