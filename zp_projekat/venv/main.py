@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import ttk
 import rsa
 import hashlib
 import time
@@ -9,6 +10,7 @@ from Crypto.PublicKey import RSA
 import pem
 import base64
 import ast
+from Crypto.IO.PEM import encode, decode
 
 
 from Crypto.Util.Padding import unpad
@@ -23,8 +25,6 @@ root = tk.Tk()
 
 root.title("PGP")
 root.geometry("700x700")
-
-
 
 
 def register():
@@ -45,7 +45,6 @@ def register():
     name = tk.Entry(root)
     name.pack(pady=10)
 
-
     email_label = tk.Label(root, text="Email: ")
     email_label.pack()
 
@@ -61,8 +60,9 @@ def register():
     register_click_button = tk.Button(root, text="Register user", command=lambda:register_click(name.get(), email.get(), password.get()))
     register_click_button.pack(pady=20)
 
+
 def register_click(name, email, password):
-    global  logged_user
+    global logged_user
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
 
     msg_label = tk.Label(root)
@@ -80,6 +80,7 @@ def register_click(name, email, password):
 
     msg_label.pack(pady=10)
 
+
 def login():
     clear_window()
 
@@ -95,19 +96,19 @@ def login():
     password = tk.Entry(root, show="*")
     password.pack(pady=10)
 
-
     login_click_button = tk.Button(root, text="Dalje", command=lambda:login_click(email.get(), password.get()))
     login_click_button.pack(pady=20)
 
+
 def login_click(email, password):
     global logged_user
+    msg_label = tk.Label(root)
+
     if not email.strip() or email == '.' or not password.strip() or password == '.':
         msg_label.config(text="All fields are mandatory.")
     hashed_password = password_hashing(password)
 
     found = False
-
-    msg_label = tk.Label(root)
 
     for user in users:
         if user["email"] == email and user["password"] == hashed_password:
@@ -121,9 +122,11 @@ def login_click(email, password):
         msg_label.config(text="You successfully logged in!")
     msg_label.pack()
 
+
 def log_out():
     global logged_user
     logged_user = None
+
 
 def generate_keys():
     global logged_user
@@ -154,6 +157,7 @@ def generate_keys():
     #export_keys_pem(private_key, public_key, name.get())
     #password_input(private_key, public_key, email)
 
+
 def generate_keys_click(selected_option):
     global logged_user
     public_key, private_key = rsa.newkeys(int(selected_option))
@@ -163,6 +167,7 @@ def generate_keys_click(selected_option):
     ciphered_private_key = cipher.encrypt(private_key_bytes)
 
     update_private_key_ring(logged_user["email"], ciphered_private_key, public_key, logged_user["password"])
+
 
 def update_private_key_ring(email, private_key, public_key, password):
     # public_key_bytes = rsa.key.PublicKey.save_pkcs1(public_key)
@@ -203,6 +208,7 @@ def password_hashing(password):
 
     return hashed_password
 
+
 def add_padding(base64_string):
     missing_padding = len(base64_string) % 4
     if missing_padding != 0:
@@ -237,14 +243,24 @@ def import_key():
                     break
 
             if not found:
-                msg_label.config(text="User not found.")
+                if len(pem_file) == 2:
+                    private_key_pem = pem_file[0].as_bytes()
+                    private_key_object = rsa.PrivateKey.load_pkcs1(private_key_pem, format='PEM')
+                    public_key_pem = pem_file[1].as_bytes()
+                    public_key_object = rsa.PublicKey.load_pkcs1(public_key_pem, format='PEM')
+                    update_private_key_ring(logged_user["email"], private_key_object, public_key_object, logged_user["password"])
+                else:
+                    msg_label.config(text="User not found.")
+                    msg_label.pack(pady=10)
+
                 return
 
             # nemamo slucaj ako je import kljuceva zapravo prvo dodavanje kljuceva u sistem
             # sta se onda radi za private key ako korisnik zeli da importuje samo public key ?
             # kad importujemo i public i private key, da li treba da zatrazimo unos lozinke u sistem
             # kako bi se proverilo zbog menjanja tajnog kljuca?
-            if len(pem_file) == 1:
+
+            if found and len(pem_file) == 1:
                 public_key_pem = pem_file[0].as_bytes()
                 public_key_object = rsa.PublicKey.load_pkcs1(public_key_pem, format='PEM')
 
@@ -253,26 +269,37 @@ def import_key():
                 print(private_key_ring)
 
                 return None, public_key_object
+            elif found:
+                password_window = tk.Toplevel(root)
+                password_window.geometry("100x100")
+                password_window.title("Password")
 
-            else:
-                private_key_pem = pem_file[0].as_bytes()
-                # moramo da sifrujemo private key
-                private_key_object = rsa.PrivateKey.load_pkcs1(private_key_pem, format='PEM')
+                password_label = tk.Label(password_window)
+                password_label.pack(pady=10)
+
+                password = tk.Entry(password_window)
+                password.pack(pady=10)
+
+                password_button = tk.Button(password_window, command=lambda: check_password(password.get(), password_window))
+                password_button.pack(pady=10)
+
+                private_key_pem = decode(str(pem_file[0]))[0]
+
 
                 # DODALA SAM SIFROVANJE PRIVATNOG KLJUCA
-                cipher = CAST.new(logged_user["password"][:16], CAST.MODE_OPENPGP)
-                private_key_bytes = rsa.key.PrivateKey.save_pkcs1(private_key_object)
-                ciphered_private_key = cipher.encrypt(private_key_bytes)
+                # cipher = CAST.new(logged_user["password"][:16], CAST.MODE_OPENPGP)
+                # private_key_bytes = rsa.key.PrivateKey.save_pkcs1(private_key_object)
+                # ciphered_private_key = cipher.encrypt(private_key_bytes)
 
                 public_key_pem = pem_file[1].as_bytes()
                 public_key_object = rsa.PublicKey.load_pkcs1(public_key_pem, format='PEM')
 
                 # ovoga nije bilo ??? mi nismo ni menjali private key ring kad dodaje oba ???
-                update_private_key_ring(user["email"], ciphered_private_key, public_key_object, user["password"])
+                update_private_key_ring(user["email"], private_key_pem, public_key_object, user["password"])
                 print(private_key_ring)
                 #password_input(private_key_object, public_key_object, email)
 
-                return ciphered_private_key, public_key_object
+                return private_key_pem, public_key_object
     msg_label.pack(pady=10)
 
 def export_keys():
@@ -306,50 +333,43 @@ def export_keys():
         option_menu_export.pack(pady=10)
 
         # da li treba pitati za sifru u slucaju exportovanja privatnog kljuca?
-        eiv = user["private_key"][:CAST.block_size + 2]
-        ciphertext = user["private_key"][CAST.block_size + 2:]
-        cipher = CAST.new(logged_user["password"][:16], CAST.MODE_OPENPGP, eiv)
-        decrypted_key = cipher.decrypt(ciphertext)
+        # eiv = user["private_key"][:CAST.block_size + 2]
+        # ciphertext = user["private_key"][CAST.block_size + 2:]
+        # cipher = CAST.new(logged_user["password"][:16], CAST.MODE_OPENPGP, eiv)
+        # decrypted_key = cipher.decrypt(ciphertext)
 
-        private_key_object = rsa.PrivateKey.load_pkcs1(decrypted_key, format='PEM')
-        # print(private_key_object)
+        private_key_pem = encode(user["private_key"], "RSA PRIVATE KEY")
+        public_key_pem = user["public_key"].save_pkcs1().decode('utf-8')
 
-        export_button = tk.Button(root, text="Export", command=lambda: export_keys_pem(
-            private_key_object if export_selected_option.get() == "Private and public keys" else None, user["public_key"], logged_user["name"]))
+        export_button = tk.Button(root, text="Export", command=lambda: export_keys_pem(private_key_pem if export_selected_option.get() == "Private and public keys" else None,
+            public_key_pem, logged_user["name"]))
         export_button.pack(pady=20)
 
     msg_label.pack(pady=10)
 
 
 def export_keys_pem(private_key, public_key, name):
-    if private_key:
-        private_key_pem = private_key.save_pkcs1().decode('utf-8')
-    public_key_pem = public_key.save_pkcs1().decode('utf-8')
-
     with open(name + ".pem", 'w') as priv_file:
         if private_key:
-            priv_file.write(private_key_pem)
-        priv_file.write(public_key_pem)
+            priv_file.write(private_key)
+            priv_file.write("\n")
+        priv_file.write(public_key)
 
 
+def check_password(password, password_window):
+    sha1_hash = hashlib.sha1()
+    sha1_hash.update(password.encode('utf-8'))
 
-def check_password(password, email, private_key, new_window):
-    for elem in private_key_ring:
-        if elem["email"] == email:
-            sha1_hash = hashlib.sha1()
-            sha1_hash.update(password.encode('utf-8'))
+    hashed_password = sha1_hash.digest()
 
-            hashed_password = sha1_hash.digest()
+    error_label = tk.Label(password_window)
 
-            if hashed_password == elem["password"]:
-                private_key_bytes = ast.literal_eval(private_key)
-                eiv = private_key_bytes[:CAST.block_size + 2]
-                ciphertext = private_key_bytes[CAST.block_size + 2:]
-                cipher = CAST.new(hashed_password[:16], CAST.MODE_OPENPGP, eiv)
-                decrypted_key = cipher.decrypt(ciphertext)
-
-                name_label = tk.Label(new_window, text=decrypted_key)
-                name_label.pack()
+    if hashed_password != logged_user["password"]:
+        error_label.config(text="Wrong password")
+        return False
+    else:
+        password_window.destroy()
+        return True
 
 
 def on_cell_click(event, table):
