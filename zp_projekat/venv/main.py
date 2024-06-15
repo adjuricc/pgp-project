@@ -16,7 +16,7 @@ from Crypto.IO.PEM import encode, decode
 from Crypto.Util.Padding import unpad
 
 private_key_ring = {}
-public_key_ring = [] # lista recnika
+public_key_ring = {}
 users = []
 logged_user = None
 generated_keys = None
@@ -175,59 +175,36 @@ def update_private_key_ring(email, private_key, public_key, password):
     der_public_key = public_key.save_pkcs1(format='DER')
     least_significant_8_bytes = der_public_key[-8:]
 
-    found = False
+    # found = False
+    #
+    # if email in private_key_ring:
+    #     private_key_ring[email]["timestamp"] = time.time()
+    #     private_key_ring[email]["key_id"] = least_significant_8_bytes
+    #     private_key_ring[email]["public_key"] = public_key
+    #     private_key_ring[email]["private_key"] = private_key
+    #     private_key_ring[email]["password"] = password
+    #
+    #     found = True
 
-    if email in private_key_ring:
-        private_key_ring[email]["timestamp"] = time.time()
-        private_key_ring[email]["key_id"] = least_significant_8_bytes
-        private_key_ring[email]["public_key"] = public_key
-        private_key_ring[email]["private_key"] = private_key
-        private_key_ring[email]["password"] = password
+    if email not in private_key_ring:
+        private_key_ring[email] = []
 
-        found = True
+    private_key_ring[email].append({"timestamp": time.time(), "key_id": least_significant_8_bytes, "public_key": public_key,
+               "private_key": private_key, "email": email, "password": password})
 
-    if not found:
-        my_dict = {}
+    print("Private key ring: " + str(private_key_ring) + "\n")
 
-        my_dict["timestamp"] = time.time()
-        my_dict["key_id"] = least_significant_8_bytes
-        my_dict["public_key"] = public_key
-        my_dict["private_key"] = private_key
-        my_dict["email"] = email
-        my_dict["password"] = password
-
-        private_key_ring[email] = my_dict
-
-    print(private_key_ring)
 
 def update_public_key_ring(email, public_key):
     der_public_key = public_key.save_pkcs1(format='DER')
     least_significant_8_bytes = der_public_key[-8:]
 
-    found = False
+    if email not in public_key_ring:
+        public_key_ring[email] = []
 
-    for i in range(0, len(public_key_ring)):
-        if public_key_ring[i]["email"] == email:
-            public_key_ring[i]["timestamp"] = time.time()
-            public_key_ring[i]["key_id"] = least_significant_8_bytes
-            public_key_ring[i]["public_key"] = public_key
+    public_key_ring[email].append({"timestamp": time.time(), "key_id": least_significant_8_bytes, "public_key": public_key, "email": email})
 
-            found = True
-
-            break
-
-    if found == False:
-        my_dict = {}
-
-        my_dict["timestamp"] = time.time()
-        my_dict["key_id"] = least_significant_8_bytes
-        my_dict["public_key"] = public_key
-        my_dict["email"] = email
-
-        public_key_ring.append(my_dict)
-
-    print(public_key_ring)
-
+    print("Public key ring: " + str(public_key_ring) + "\n")
 
 
 def password_hashing(password):
@@ -421,18 +398,14 @@ def show_keys():
     private_key_ring_table.heading('public_key', text='Public Key')
     private_key_ring_table.heading('private_key', text='Private Key')
 
-    print(private_key_ring[logged_user["email"]])
-
-
     # OVO TREBA DA SE PROMENI KAD BUDEMO STAVLJALI DA MEJL MOZE DA IMA VISE KLJUCEVA, TO TI URADI PLS
-    private_key_ring_table.insert('', tk.END, values=(logged_user["email"], private_key_ring[logged_user["email"]]['public_key'], private_key_ring[logged_user["email"]]['private_key']))
-    # for item in private_key_ring[logged_user["email"]]:
-    #     print(item)
-    #     private_key_ring_table.insert('', tk.END, values=(item[0], item[1], item['private_key']))
+    if logged_user and len(private_key_ring) > 0:
+        for item in private_key_ring[logged_user["email"]]:
+            private_key_ring_table.insert('', tk.END, values=(item["email"], item["public_key"], item["private_key"]))
 
     private_key_ring_table.pack()
 
-    private_key_ring_table.bind('<ButtonRelease-1>', lambda event: on_cell_click(event, table))
+    private_key_ring_table.bind('<ButtonRelease-1>', lambda event: on_cell_click(event, private_key_ring_table))
 
     public_key_ring_table_frame = ttk.Frame(root)
     public_key_ring_table_frame.pack(pady=20)
@@ -444,13 +417,15 @@ def show_keys():
     public_key_ring_table.heading('email', text='Email')
     public_key_ring_table.heading('public_key', text='Public Key')
 
-    for item in public_key_ring:
-        print(item)
-        public_key_ring_table.insert('', tk.END, values=(item["email"], item["public_key"]))
+    if logged_user and len(public_key_ring) > 0:
+        for user in public_key_ring.keys():
+            for key in public_key_ring[user]:
+                if key["email"] != logged_user["email"]:
+                    public_key_ring_table.insert('', tk.END, values=(key["email"], key["public_key"]))
 
     public_key_ring_table.pack()
 
-    public_key_ring_table.bind('<ButtonRelease-1>', lambda event: on_cell_click(event, table))
+    public_key_ring_table.bind('<ButtonRelease-1>', lambda event: on_cell_click(event, public_key_ring_table))
 
 
 def on_cell_click(event, table):
@@ -575,6 +550,63 @@ def password_input(name, email, key_size):
     return password
 
 
+def send_message():
+    def enable_disable_radiobuttons():
+        if encryption_checked.get():
+            tripledes_check_button.config(state='normal')
+            aes_check_button.config(state='normal')
+        else:
+            tripledes_check_button.config(state='disabled')
+            aes_check_button.config(state='disabled')
+
+    clear_window()
+
+    file_name_label = tk.Label(root, text="File name")
+    file_name_label.pack(pady=10)
+
+    file_name = tk.Entry(root)
+    file_name.pack(pady=10)
+
+    file_path_label = tk.Label(root, text="File path")
+    file_path_label.pack(pady=10)
+
+    file_path = tk.Entry(root)
+    file_path.pack(pady=10)
+
+    encryption_checked = tk.BooleanVar(value=False)
+    selected_option_radio = tk.IntVar()
+
+    encryption_check_button = ttk.Checkbutton(root, text="Encryption", variable=encryption_checked, command=enable_disable_radiobuttons)
+    tripledes_check_button = ttk.Radiobutton(root, text="TripleDES", variable=selected_option_radio, value=1, state='disabled')
+    aes_check_button = ttk.Radiobutton(root, text="AES128", variable=selected_option_radio, value=2, state='disabled')
+
+    encryption_check_button.pack()
+    tripledes_check_button.pack()
+    aes_check_button.pack()
+
+    options = []
+
+    for user in public_key_ring.keys():
+        if logged_user["email"] != user:
+            for key in public_key_ring[user]:
+                options.append(user + " " + str(key["public_key"]))
+
+    selected_option = tk.StringVar()
+
+    if len(options) > 0:
+        selected_option.set(options[0])
+    else:
+        selected_option.set("No public keys")
+        options.append("No public keys")
+
+    option_menu_label = tk.Label(root, text="Public key:")
+    option_menu_label.pack()
+
+    option_menu = tk.OptionMenu(root, selected_option, *options)
+    option_menu.config(width=20)
+    option_menu.pack(pady=10)
+
+
 # login()
 button_frame = tk.Frame(root)
 button_frame.pack(side=tk.TOP, pady=10)
@@ -596,6 +628,9 @@ import_keys_button.pack(side=tk.LEFT, padx=5, pady=10)
 
 export_keys_button = tk.Button(button_frame, text="Export keys", command=export_keys)
 export_keys_button.pack(side=tk.LEFT, padx=5, pady=10)
+
+send_message_button = tk.Button(button_frame, text="Send message", command=send_message)
+send_message_button.pack(side=tk.LEFT, padx=5, pady=10)
 
 log_out_button = tk.Button(button_frame, text="Log out", command=log_out)
 log_out_button.pack(side=tk.LEFT, padx=5, pady=10)
