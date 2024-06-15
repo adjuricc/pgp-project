@@ -16,7 +16,7 @@ from Crypto.IO.PEM import encode, decode
 from Crypto.Util.Padding import unpad
 
 private_key_ring = {}
-public_key_ring = {}
+public_key_ring = [] # lista recnika
 users = []
 logged_user = None
 generated_keys = None
@@ -167,6 +167,7 @@ def generate_keys_click(selected_option):
     ciphered_private_key = cipher.encrypt(private_key_bytes)
 
     update_private_key_ring(logged_user["email"], ciphered_private_key, public_key, logged_user["password"])
+    update_public_key_ring(logged_user["email"], public_key)
 
 
 def update_private_key_ring(email, private_key, public_key, password):
@@ -198,6 +199,35 @@ def update_private_key_ring(email, private_key, public_key, password):
         private_key_ring[email] = my_dict
 
     print(private_key_ring)
+
+def update_public_key_ring(email, public_key):
+    der_public_key = public_key.save_pkcs1(format='DER')
+    least_significant_8_bytes = der_public_key[-8:]
+
+    found = False
+
+    for i in range(0, len(public_key_ring)):
+        if public_key_ring[i]["email"] == email:
+            public_key_ring[i]["timestamp"] = time.time()
+            public_key_ring[i]["key_id"] = least_significant_8_bytes
+            public_key_ring[i]["public_key"] = public_key
+
+            found = True
+
+            break
+
+    if found == False:
+        my_dict = {}
+
+        my_dict["timestamp"] = time.time()
+        my_dict["key_id"] = least_significant_8_bytes
+        my_dict["public_key"] = public_key
+        my_dict["email"] = email
+
+        public_key_ring.append(my_dict)
+
+    print(public_key_ring)
+
 
 
 def password_hashing(password):
@@ -244,11 +274,14 @@ def import_key():
 
             if not found:
                 if len(pem_file) == 2:
-                    private_key_pem = pem_file[0].as_bytes()
-                    private_key_object = rsa.PrivateKey.load_pkcs1(private_key_pem, format='PEM')
+                    password_window_click()
+                    private_key_pem = decode(str(pem_file[0]))[0]
+
                     public_key_pem = pem_file[1].as_bytes()
                     public_key_object = rsa.PublicKey.load_pkcs1(public_key_pem, format='PEM')
-                    update_private_key_ring(logged_user["email"], private_key_object, public_key_object, logged_user["password"])
+
+                    update_private_key_ring(logged_user["email"], private_key_pem, public_key_object, logged_user["password"])
+                    update_public_key_ring(logged_user["email"], public_key_object)
                 else:
                     msg_label.config(text="User not found.")
                     msg_label.pack(pady=10)
@@ -265,24 +298,12 @@ def import_key():
                 public_key_object = rsa.PublicKey.load_pkcs1(public_key_pem, format='PEM')
 
                 update_private_key_ring(user["email"], user["private_key"], public_key_object, user["password"])
-                # update_public_key_ring(user["email"], public_key_object)
+                update_public_key_ring(user["email"], public_key_object)
                 print(private_key_ring)
 
                 return None, public_key_object
             elif found:
-                password_window = tk.Toplevel(root)
-                password_window.geometry("100x100")
-                password_window.title("Password")
-
-                password_label = tk.Label(password_window)
-                password_label.pack(pady=10)
-
-                password = tk.Entry(password_window)
-                password.pack(pady=10)
-
-                password_button = tk.Button(password_window, command=lambda: check_password(password.get(), password_window))
-                password_button.pack(pady=10)
-
+                password_window_click()
                 private_key_pem = decode(str(pem_file[0]))[0]
 
 
@@ -296,11 +317,42 @@ def import_key():
 
                 # ovoga nije bilo ??? mi nismo ni menjali private key ring kad dodaje oba ???
                 update_private_key_ring(user["email"], private_key_pem, public_key_object, user["password"])
+                update_public_key_ring(user["email"], public_key_object)
                 print(private_key_ring)
+
                 #password_input(private_key_object, public_key_object, email)
 
                 return private_key_pem, public_key_object
     msg_label.pack(pady=10)
+
+def password_window_click():
+    password_window = tk.Toplevel(root)
+    password_window.geometry("300x300")
+    password_window.title("Password")
+
+    password_label = tk.Label(password_window)
+    password_label.pack(pady=10)
+
+    password = tk.Entry(password_window, show="*")
+    password.pack(pady=10)
+
+    password_button = tk.Button(password_window, text="Check", command=lambda: check_password(password.get(), password_window))
+    password_button.pack(pady=10)
+
+def check_password(password, password_window):
+    sha1_hash = hashlib.sha1()
+    sha1_hash.update(password.encode('utf-8'))
+
+    hashed_password = sha1_hash.digest()
+
+    error_label = tk.Label(password_window)
+
+    if hashed_password != logged_user["password"]:
+        error_label.config(text="Wrong password")
+        error_label.pack(pady= 10)
+    else:
+        password_window.destroy()
+
 
 def export_keys():
     global logged_user
@@ -355,21 +407,50 @@ def export_keys_pem(private_key, public_key, name):
             priv_file.write("\n")
         priv_file.write(public_key)
 
+def show_keys():
+    clear_window()
 
-def check_password(password, password_window):
-    sha1_hash = hashlib.sha1()
-    sha1_hash.update(password.encode('utf-8'))
+    private_key_ring_table_frame = ttk.Frame(root)
+    private_key_ring_table_frame.pack(pady=20)
 
-    hashed_password = sha1_hash.digest()
+    columns = ('email', 'public_key', 'private_key')
 
-    error_label = tk.Label(password_window)
+    private_key_ring_table = ttk.Treeview(private_key_ring_table_frame, columns=columns, show='headings')
 
-    if hashed_password != logged_user["password"]:
-        error_label.config(text="Wrong password")
-        return False
-    else:
-        password_window.destroy()
-        return True
+    private_key_ring_table.heading('email', text='Email')
+    private_key_ring_table.heading('public_key', text='Public Key')
+    private_key_ring_table.heading('private_key', text='Private Key')
+
+    print(private_key_ring[logged_user["email"]])
+
+
+    # OVO TREBA DA SE PROMENI KAD BUDEMO STAVLJALI DA MEJL MOZE DA IMA VISE KLJUCEVA, TO TI URADI PLS
+    private_key_ring_table.insert('', tk.END, values=(logged_user["email"], private_key_ring[logged_user["email"]]['public_key'], private_key_ring[logged_user["email"]]['private_key']))
+    # for item in private_key_ring[logged_user["email"]]:
+    #     print(item)
+    #     private_key_ring_table.insert('', tk.END, values=(item[0], item[1], item['private_key']))
+
+    private_key_ring_table.pack()
+
+    private_key_ring_table.bind('<ButtonRelease-1>', lambda event: on_cell_click(event, table))
+
+    public_key_ring_table_frame = ttk.Frame(root)
+    public_key_ring_table_frame.pack(pady=20)
+
+    columns = ('email', 'public_key')
+
+    public_key_ring_table = ttk.Treeview(public_key_ring_table_frame, columns=columns, show='headings')
+
+    public_key_ring_table.heading('email', text='Email')
+    public_key_ring_table.heading('public_key', text='Public Key')
+
+    for item in public_key_ring:
+        print(item)
+        public_key_ring_table.insert('', tk.END, values=(item["email"], item["public_key"]))
+
+    public_key_ring_table.pack()
+
+    public_key_ring_table.bind('<ButtonRelease-1>', lambda event: on_cell_click(event, table))
 
 
 def on_cell_click(event, table):
@@ -459,35 +540,6 @@ def password_button_click(password, email, selected_option, name, key_size):
 
 
 
-
-def update_public_key_ring(email, public_key):
-    der_public_key = public_key.save_pkcs1(format='DER')
-    least_significant_8_bytes = der_public_key[-8:]
-
-    found = False
-
-    for i in range(0, len(public_key_ring)):
-        if public_key_ring[i]["email"] == email:
-            public_key_ring[i]["timestamp"] = time.time()
-            public_key_ring[i]["key_id"] = least_significant_8_bytes
-            public_key_ring[i]["public_key"] = public_key
-
-            found = True
-
-            break
-
-    if found == False:
-        my_dict = {}
-
-        my_dict["timestamp"] = time.time()
-        my_dict["key_id"] = least_significant_8_bytes
-        my_dict["public_key"] = public_key
-        my_dict["email"] = email
-
-        public_key_ring.append(my_dict)
-
-
-
 def clear_window():
     for widget in root.winfo_children():
         if widget.winfo_class() == 'Frame':
@@ -535,6 +587,9 @@ login_button.pack(side=tk.LEFT, padx=5, pady=10)
 
 generate_keys_button = tk.Button(button_frame, text="Generate keys", command=generate_keys)
 generate_keys_button.pack(side=tk.LEFT, padx=5, pady=10)
+
+show_keys_button = tk.Button(button_frame, text="Keys", command=show_keys)
+show_keys_button.pack(side=tk.LEFT, padx=5, pady=10)
 
 import_keys_button = tk.Button(button_frame, text="Import keys", command= import_key)
 import_keys_button.pack(side=tk.LEFT, padx=5, pady=10)
