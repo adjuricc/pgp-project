@@ -10,6 +10,7 @@ from Crypto.PublicKey import RSA
 import pem
 import base64
 import ast
+import csv
 from Crypto.IO.PEM import encode, decode
 
 
@@ -72,7 +73,7 @@ def register_click(name, email, password):
     elif not re.fullmatch(pattern, email):
         msg_label.config(text="Invalid format for email address.")
     else:
-        hashed_password = password_hashing(password)
+        hashed_password = text_hashing(password)
 
         logged_user = {"name": name, "email": email, "password": hashed_password}
 
@@ -106,7 +107,7 @@ def login_click(email, password):
 
     if not email.strip() or email == '.' or not password.strip() or password == '.':
         msg_label.config(text="All fields are mandatory.")
-    hashed_password = password_hashing(password)
+    hashed_password = text_hashing(password)
 
     found = False
 
@@ -207,13 +208,13 @@ def update_public_key_ring(email, public_key):
     print("Public key ring: " + str(public_key_ring) + "\n")
 
 
-def password_hashing(password):
+def text_hashing(text):
     sha1_hash = hashlib.sha1()
-    sha1_hash.update(password.encode('utf-8'))
+    sha1_hash.update(text.encode('utf-8'))
 
-    hashed_password = sha1_hash.digest()
+    hashed_text = sha1_hash.digest()
 
-    return hashed_password
+    return hashed_text
 
 
 def add_padding(base64_string):
@@ -362,10 +363,7 @@ def export_keys():
         option_menu_export.pack(pady=10)
 
         # da li treba pitati za sifru u slucaju exportovanja privatnog kljuca?
-        # eiv = user["private_key"][:CAST.block_size + 2]
-        # ciphertext = user["private_key"][CAST.block_size + 2:]
-        # cipher = CAST.new(logged_user["password"][:16], CAST.MODE_OPENPGP, eiv)
-        # decrypted_key = cipher.decrypt(ciphertext)
+
 
         private_key_pem = encode(user["private_key"], "RSA PRIVATE KEY")
         public_key_pem = user["public_key"].save_pkcs1().decode('utf-8')
@@ -405,7 +403,7 @@ def show_keys():
 
     private_key_ring_table.pack()
 
-    private_key_ring_table.bind('<ButtonRelease-1>', lambda event: on_cell_click(event, private_key_ring_table))
+    private_key_ring_table.bind('<ButtonRelease-1>')
 
     public_key_ring_table_frame = ttk.Frame(root)
     public_key_ring_table_frame.pack(pady=20)
@@ -425,7 +423,7 @@ def show_keys():
 
     public_key_ring_table.pack()
 
-    public_key_ring_table.bind('<ButtonRelease-1>', lambda event: on_cell_click(event, public_key_ring_table))
+    public_key_ring_table.bind('<ButtonRelease-1>')
 
 
 def on_cell_click(event, table):
@@ -559,6 +557,12 @@ def send_message():
             tripledes_check_button.config(state='disabled')
             aes_check_button.config(state='disabled')
 
+    def enable_disable_signature():
+        if signature_checked.get():
+            private_key_entry.config(state='normal')
+        else:
+            private_key_entry.config(state='disabled')
+
     clear_window()
 
     file_name_label = tk.Label(root, text="File name")
@@ -574,6 +578,7 @@ def send_message():
     file_path.pack(pady=10)
 
     encryption_checked = tk.BooleanVar(value=False)
+    signature_checked = tk.BooleanVar(value=False)
     selected_option_radio = tk.IntVar()
 
     encryption_check_button = ttk.Checkbutton(root, text="Encryption", variable=encryption_checked, command=enable_disable_radiobuttons)
@@ -589,7 +594,7 @@ def send_message():
     for user in public_key_ring.keys():
         if logged_user["email"] != user:
             for key in public_key_ring[user]:
-                options.append(user + " " + str(key["public_key"]))
+                options.append(user + " " + str(key["key_id"]))
 
     selected_option = tk.StringVar()
 
@@ -603,8 +608,181 @@ def send_message():
     option_menu_label.pack()
 
     option_menu = tk.OptionMenu(root, selected_option, *options)
-    option_menu.config(width=20)
+    option_menu.config(width=50)
     option_menu.pack(pady=10)
+
+
+    signature_check_button = ttk.Checkbutton(root, text="Signature", variable=signature_checked, command= enable_disable_signature)
+    signature_check_button.pack()
+
+    private_key_entry = tk.Entry(root, state='disabled')
+    private_key_entry.pack(pady=10)
+
+    compress_checked = tk.BooleanVar(value=False)
+    compress_check_button = ttk.Checkbutton(root, text="Compress", variable=compress_checked)
+    compress_check_button.pack()
+
+    print(compress_checked.get())
+
+    conversion_checked = tk.BooleanVar(value=False)
+    conversion_check_button = ttk.Checkbutton(root, text="Convert to radix-64", variable=conversion_checked)
+    conversion_check_button.pack()
+
+    message_text = tk.Text(root, width=40, height=10)
+    message_text.pack(pady=10)
+
+    send_message_button = tk.Button(root, text="Send Message", command=lambda: send_message_click(encryption_checked.get(), selected_option_radio, signature_checked.get(), compress_checked.get(), conversion_checked.get(),
+                                                                                                  file_name.get(), file_path.get(),
+                                                                                                    message_text.get("1.0", tk.END), private_key_entry.get(), selected_option.get().split(' ')[1]))
+    send_message_button.pack(pady=10)
+
+def send_message_click(encryption_checked, algorithm, signature_checked, compress_checked, conversion_checked, file_name, file_path, message, private_key, public_key):
+    if message.endswith('\n'):
+        message = message[:-1]
+
+    data = [
+        ['timestamp', 'data', 'filename', 'signature', 'encryption'],
+        [time.time(), message, file_name]
+    ]
+
+    filename = file_path + "/" + file_name
+
+    signature_data = []
+
+    if signature_checked:
+        timestamp = time.time()
+        to_hash = message + "" + str(timestamp)
+        hashed_data = text_hashing(to_hash)
+
+        print(private_key)
+
+        eiv = private_key.encode('utf-8')[:CAST.block_size + 2]
+        ciphertext = private_key.encode('utf-8')[CAST.block_size + 2:]
+        decipher = CAST.new(logged_user["password"][:16], CAST.MODE_OPENPGP, eiv)
+
+        print(type(decipher))
+        print(type(ciphertext))
+        decrypted_key_bytes = decipher.decrypt(ciphertext)
+        print(type(decrypted_key_bytes.decode("utf-8")))
+        # print(base64.encodebytes(decrypted_key_bytes))
+
+        # private_key_pem = encode(base64.encodebytes(decrypted_key_bytes), "RSA PRIVATE KEY")
+        # print(private_key_pem)
+        # private_key_object = rsa.PrivateKey.load_pkcs1(decrypted_key_bytes, format='DER')
+
+        # pem_header = b'-----BEGIN RSA PRIVATE KEY-----\n'
+        # pem_footer = b'-----END RSA PRIVATE KEY-----'
+        # pem_content = pem_header + base64.encodebytes(decrypted_key_bytes) + pem_footer
+
+        # Ovde je jednostavan primer sa dummy vrednostima
+        n = int.from_bytes(decrypted_key_bytes[:256], 'big')
+        e = int.from_bytes(decrypted_key_bytes[256:260], 'big')
+        d = int.from_bytes(decrypted_key_bytes[260:516], 'big')
+        p = int.from_bytes(decrypted_key_bytes[516:644], 'big')
+        q = int.from_bytes(decrypted_key_bytes[644:772], 'big')
+        dmp1 = int.from_bytes(decrypted_key_bytes[772:900], 'big')
+        dmq1 = int.from_bytes(decrypted_key_bytes[900:1028], 'big')
+        iqmp = int.from_bytes(decrypted_key_bytes[1028:], 'big')
+
+        # Kreiranje PrivateKey objekta
+        private_key_object = rsa.PrivateKey(n, e, d, p, q)
+
+        # decrypted_private_key = rsa.PrivateKey.load_pkcs1(pem_content)
+
+        # crypto = rsa.encrypt(hashed_data, private_key_object)
+        hash = rsa.compute_hash(to_hash.encode(), 'SHA-1')
+        crypto = rsa.sign_hash(hash, private_key_object, 'SHA-1')
+
+        # hash_message = private_key_object.sign(
+        #     bytes(to_hash, 'ascii'),
+        #     padding.PSS(
+        #         mgf=padding.MGF1(hashes.SHA1()),
+        #         salt_length=padding.PSS.MAX_LENGTH
+        #     ),
+        #     hashes.SHA1()
+        # )
+
+        # print(hash_message)
+
+        print(public_key_ring[logged_user["email"]])
+        key_id = None
+        for item in private_key_ring[logged_user["email"]]:
+            print(item["private_key"])
+            print(private_key)
+            if(str(item["private_key"]) == str(private_key)):
+                key_id = item["key_id"]
+                break
+
+        signature_data = [timestamp, key_id, crypto[:2], crypto]
+        data[1].append(signature_data)
+
+    encryption_data = []
+
+    with open(filename, 'w', newline='') as file:
+        file.write(str(timestamp) + '\n')
+        file.write(message + '\n')
+        file.write(filename + '\n')
+        file.write(str(signature_data) + '\n')
+        file.write(str(encryption_data) + '\n')
+
+def receive_message():
+    clear_window()
+
+    file_path = filedialog.askopenfilename(
+        title="Odaberi fajl",
+        filetypes=(("CSV fajlovi", "*.csv"), ("Svi fajlovi", "*.*"))
+    )
+
+    message = []
+
+    if file_path:
+        with open(file_path, 'r') as file:
+            csv_content = file.readlines()
+
+
+        # print(csv_content)
+        signed_message = csv_content[1][0: len(csv_content[1]) - 1] + "" + csv_content[0][0: len(csv_content[0]) - 1]
+        print(signed_message)
+        msg_signature = csv_content[3].split(',')
+        print(msg_signature)
+        key_id = msg_signature[1][1:]
+        signature = msg_signature[3][1:len(msg_signature[3]) - 2]
+        print(signature)
+        # print(msg_signature)
+
+        public_key = None
+
+        for key in public_key_ring.keys():
+            for item in public_key_ring[key]:
+                print(key_id)
+                print(item["key_id"])
+                if(str(item["key_id"]) == str(key_id)):
+
+                    public_key = item["public_key"]
+                    break
+
+        message_hash = rsa.compute_hash(signed_message.encode('utf-8'), 'SHA-1')
+
+        rsa.verify(signed_message, signature.encode("utf-8"), public_key)
+
+        # public_key.verify(
+        #     signature,
+        #     signed_message,
+        #     padding.PSS(
+        #         mgf=padding.MGF1(hashes.SHA1()),
+        #         salt_length=padding.PSS.MAX_LENGTH
+        #     ),
+        #     hashes.SHA1()
+        # )
+
+        # print(msg_split)
+        # print(msg_split[3])
+        # msg_signature = msg_split[3][1: len(msg_split[3])]
+
+        # print(msg_signature)
+
+# def create_message():
+#
 
 
 # login()
@@ -631,6 +809,9 @@ export_keys_button.pack(side=tk.LEFT, padx=5, pady=10)
 
 send_message_button = tk.Button(button_frame, text="Send message", command=send_message)
 send_message_button.pack(side=tk.LEFT, padx=5, pady=10)
+
+receive_message_button = tk.Button(button_frame, text="Receive message", command=receive_message)
+receive_message_button.pack(side=tk.LEFT, padx=5, pady=10)
 
 log_out_button = tk.Button(button_frame, text="Log out", command=log_out)
 log_out_button.pack(side=tk.LEFT, padx=5, pady=10)
