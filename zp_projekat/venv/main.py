@@ -13,6 +13,7 @@ import base64
 import ast
 import csv
 import gzip
+import codecs
 from Crypto.Random import get_random_bytes
 from Crypto.IO.PEM import encode, decode
 
@@ -648,8 +649,11 @@ def send_message():
                                                                                                     message_text.get("1.0", tk.END), private_key_entry.get(), selected_option.get().split(' ')[1]))
     send_message_button.pack(pady=10)
 
+
+nonce = get_random_bytes(15)
+
 def send_message_click(encryption_checked, signature_checked, compress_checked, conversion_checked, file_name, file_path, message, private_key, public_key):
-    global selected_option_alg
+    global selected_option_alg, nonce
     if message.endswith('\n'):
         message = message[:-1]
 
@@ -745,14 +749,14 @@ def send_message_click(encryption_checked, signature_checked, compress_checked, 
 
         if selected_option_alg.get() == 1:
             key = PBKDF2(session_key, salt, dkLen=24)
-            cipher = DES3.new(key, DES3.MODE_EAX)
+            cipher = DES3.new(key, DES3.MODE_EAX, nonce=nonce)
         elif selected_option_alg.get() == 2:
             key = PBKDF2(session_key, salt, dkLen=16)
-            cipher = AES.new(key, AES.MODE_EAX)
+            cipher = AES.new(key, AES.MODE_EAX, nonce=nonce)
 
         ciphertext, tag = cipher.encrypt_and_digest(message_to_encrypt.encode())
-        # encrypted_message = cipher.nonce + tag + ciphertext
-        encrypted_message = ciphertext
+        encrypted_message = (cipher.nonce, tag, ciphertext)
+        # encrypted_message = ciphertext
 
         receiver_public_key = None
         for key in public_key_ring.keys():
@@ -763,6 +767,8 @@ def send_message_click(encryption_checked, signature_checked, compress_checked, 
 
         print(receiver_public_key)
         print(type(receiver_public_key))
+
+        print(session_key)
 
         encrypted_session_key = rsa.encrypt(session_key, receiver_public_key)
 
@@ -799,6 +805,7 @@ def send_message_click(encryption_checked, signature_checked, compress_checked, 
         file.write(str(encryption_data) + '\n')
 
 def receive_message():
+    global nonce
     clear_window()
 
     file_path = filedialog.askopenfilename(
@@ -869,16 +876,24 @@ def receive_message():
 
         print(decrypted_session_key)
 
+        nonce, tag, ciphertext = encryption_msg
         if(selected_option_alg.get() == 1):
-            cipher_decrypt = DES3.new(decrypted_session_key, DES3.MODE_EAX)  # you can't reuse an object for encrypting or decrypting other data with the same key.
-            plaintext = cipher_decrypt.decrypt(encryption_msg.encode())
+            cipher_decrypt = DES3.new(decrypted_session_key, DES3.MODE_EAX, nonce=nonce)  # you can't reuse an object for encrypting or decrypting other data with the same key.
+            # plaintext = cipher_decrypt.decrypt(encryption_msg.encode())
 
-            print(plaintext)
+            try:
+                plaintext_bytes = cipher_decrypt.decrypt_and_verify(ciphertext, tag)
+                plaintext = plaintext_bytes.decode('utf-8')
+                print("Decrypted plaintext:", plaintext)
+            except ValueError as e:
+                print("Decryption failed or message is tampered:", e)
+            except UnicodeDecodeError as e:
+                print("Failed to decode the decrypted bytes:", e)
         elif (selected_option_alg.get() == 2):
             cipher = AES.new(decrypted_session_key, AES.MODE_EAX)
             plaintext = cipher.decrypt(encryption_msg.encode())
 
-            print(plaintext)
+            print(plaintext.decode("ISO-8859-1"))
 
         #AUTENTIKACIJA
         # print(csv_content)
