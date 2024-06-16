@@ -25,7 +25,11 @@ users = []
 logged_user = None
 generated_keys = None
 
+
 root = tk.Tk()
+
+selected_option_alg = tk.IntVar()
+
 
 root.title("PGP")
 root.geometry("700x700")
@@ -165,6 +169,9 @@ def generate_keys():
 def generate_keys_click(selected_option):
     global logged_user
     public_key, private_key = rsa.newkeys(int(selected_option))
+
+    print(public_key)
+    print(private_key)
 
     cipher = CAST.new(logged_user["password"][:16], CAST.MODE_OPENPGP)
     private_key_bytes = rsa.key.PrivateKey.save_pkcs1(private_key)
@@ -552,6 +559,7 @@ def password_input(name, email, key_size):
 
 
 def send_message():
+    global selected_option_alg
     def enable_disable_radiobuttons():
         if encryption_checked.get():
             tripledes_check_button.config(state='normal')
@@ -582,24 +590,25 @@ def send_message():
 
     encryption_checked = tk.BooleanVar(value=False)
     signature_checked = tk.BooleanVar(value=False)
-    selected_option_radio = tk.IntVar()
+    
 
     encryption_check_button = ttk.Checkbutton(root, text="Encryption", variable=encryption_checked, command=enable_disable_radiobuttons)
-    tripledes_check_button = ttk.Radiobutton(root, text="TripleDES", variable=selected_option_radio, value=1, state='disabled')
-    aes_check_button = ttk.Radiobutton(root, text="AES128", variable=selected_option_radio, value=2, state='disabled')
+    tripledes_check_button = ttk.Radiobutton(root, text="TripleDES", variable=selected_option_alg, value=1, state='disabled')
+    aes_check_button = ttk.Radiobutton(root, text="AES128", variable=selected_option_alg, value=2, state='disabled')
 
     encryption_check_button.pack()
     tripledes_check_button.pack()
     aes_check_button.pack()
 
     options = []
+    selected_option = tk.StringVar()
 
     for user in public_key_ring.keys():
         if logged_user["email"] != user:
             for key in public_key_ring[user]:
                 options.append(user + " " + str(key["key_id"]))
 
-    selected_option = tk.StringVar()
+
 
     if len(options) > 0:
         selected_option.set(options[0])
@@ -634,21 +643,23 @@ def send_message():
     message_text = tk.Text(root, width=40, height=10)
     message_text.pack(pady=10)
 
-    send_message_button = tk.Button(root, text="Send Message", command=lambda: send_message_click(encryption_checked.get(), selected_option_radio.get(), signature_checked.get(), compress_checked.get(), conversion_checked.get(),
+    send_message_button = tk.Button(root, text="Send Message", command=lambda: send_message_click(encryption_checked.get(), signature_checked.get(), compress_checked.get(), conversion_checked.get(),
                                                                                                   file_name.get(), file_path.get(),
                                                                                                     message_text.get("1.0", tk.END), private_key_entry.get(), selected_option.get().split(' ')[1]))
     send_message_button.pack(pady=10)
 
-def send_message_click(encryption_checked, algorithm, signature_checked, compress_checked, conversion_checked, file_name, file_path, message, private_key, public_key):
+def send_message_click(encryption_checked, signature_checked, compress_checked, conversion_checked, file_name, file_path, message, private_key, public_key):
+    global selected_option_alg
     if message.endswith('\n'):
         message = message[:-1]
 
+    print("SEND MESSAGE")
     data = [
         ['timestamp', 'filename', 'signature', 'data', 'encryption'],
         [time.time(), file_name]
     ]
 
-    filename = file_path + "/" + file_name
+    filename = file_path + "\\" + file_name
 
     signature_data = []
     encryption_data = []
@@ -732,15 +743,16 @@ def send_message_click(encryption_checked, algorithm, signature_checked, compres
 
         cipher = None
 
-        if algorithm == 1:
+        if selected_option_alg.get() == 1:
             key = PBKDF2(session_key, salt, dkLen=24)
             cipher = DES3.new(key, DES3.MODE_EAX)
-        elif algorithm == 2:
+        elif selected_option_alg.get() == 2:
             key = PBKDF2(session_key, salt, dkLen=16)
             cipher = AES.new(key, AES.MODE_EAX)
 
         ciphertext, tag = cipher.encrypt_and_digest(message_to_encrypt.encode())
-        encrypted_message = cipher.nonce + tag + ciphertext
+        # encrypted_message = cipher.nonce + tag + ciphertext
+        encrypted_message = ciphertext
 
         receiver_public_key = None
         for key in public_key_ring.keys():
@@ -750,12 +762,14 @@ def send_message_click(encryption_checked, algorithm, signature_checked, compres
                     break
 
         print(receiver_public_key)
+        print(type(receiver_public_key))
 
         encrypted_session_key = rsa.encrypt(session_key, receiver_public_key)
 
         print(encrypted_session_key)
+        print(base64.b64encode(encrypted_session_key))
 
-        encryption_data = [encrypted_message, public_key, encrypted_session_key]
+        encryption_data = [encrypted_message, public_key, base64.b64encode(encrypted_session_key)]
     elif not conversion_checked:
         encryption_data = [message]
 
@@ -798,15 +812,25 @@ def receive_message():
         with open(file_path, 'r') as file:
             csv_content = file.readlines()
 
-        encryption_data = csv_content[4]
-        key_id = encryption_data[1]
+        encryption_data = csv_content[3]
+        encryption_msg = encryption_data.split(", ")[0][1: len(encryption_data.split(',')[0])]
+        print(encryption_msg)
+        key_id = encryption_data.split(", ")[1][1: len(encryption_data.split(',')[1]) - 2]
+        key_id = key_id.replace('\\\\', '\\')
+        base_encrypted_key_session = encryption_data.split(', ')[2][1: len(encryption_data.split(',')[2]) - 3]
+        print(base_encrypted_key_session)
+        encrypted_key_session = base64.b64decode(base_encrypted_key_session)
 
+        private_key = None
         for item in private_key_ring[logged_user["email"]]:
+            print(item["key_id"])
+            print(key_id)
             if str(item["key_id"]) == str(key_id):
-                print(item["key_id"])
+                private_key = item["private_key"]
+                break
 
-        eiv = private_key.encode('utf-8')[:CAST.block_size + 2]
-        ciphertext = private_key.encode('utf-8')[CAST.block_size + 2:]
+        eiv = private_key[:CAST.block_size + 2]
+        ciphertext = private_key[CAST.block_size + 2:]
         decipher = CAST.new(logged_user["password"][:16], CAST.MODE_OPENPGP, eiv)
 
         print(type(decipher))
@@ -819,7 +843,8 @@ def receive_message():
 
         # private_key_pem = encode(base64.encodebytes(decrypted_key_bytes), "RSA PRIVATE KEY")
         # print(private_key_pem)
-        # private_key_object = rsa.PrivateKey.load_pkcs1(decrypted_key_bytes, format='DER')
+        private_key_object = rsa.PrivateKey.load_pkcs1(decrypted_key_bytes, format='PEM')
+        print(private_key_object)
 
         # pem_header = b'-----BEGIN RSA PRIVATE KEY-----\n'
         # pem_footer = b'-----END RSA PRIVATE KEY-----'
@@ -836,7 +861,24 @@ def receive_message():
         iqmp = int.from_bytes(decrypted_key_bytes[1028:], 'big')
 
         # Kreiranje PrivateKey objekta
-        private_key_object = rsa.PrivateKey(n, e, d, p, q)
+        # private_key_object = rsa.PrivateKey(n, e, d, p, q)
+
+        # encrypted_key_str = base64.b64encode(encrypted_key_session.encode("utf-8")).decode('utf-8')
+        # base = base64.b64decode(encrypted_key_str)
+        decrypted_session_key = rsa.decrypt(encrypted_key_session, private_key_object)
+
+        print(decrypted_session_key)
+
+        if(selected_option_alg.get() == 1):
+            cipher_decrypt = DES3.new(decrypted_session_key, DES3.MODE_EAX)  # you can't reuse an object for encrypting or decrypting other data with the same key.
+            plaintext = cipher_decrypt.decrypt(encryption_msg.encode())
+
+            print(plaintext)
+        elif (selected_option_alg.get() == 2):
+            cipher = AES.new(decrypted_session_key, AES.MODE_EAX)
+            plaintext = cipher.decrypt(encryption_msg.encode())
+
+            print(plaintext)
 
         #AUTENTIKACIJA
         # print(csv_content)

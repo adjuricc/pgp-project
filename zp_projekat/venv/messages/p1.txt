@@ -1,0 +1,4 @@
+1718542675.1228356
+C:\Users\anjci\PycharmProjects\zp_projekat\venv\messages\p1.txt
+[]
+[b'\x1fPA\x8e\x0f\xb9\xd8v\xcf\xc7\xcc\xea\x8d\xe3\x8e\xe2eH\x02?%\x18\x89', "b'\\x1a\\xed\\x95\\x02\\x03\\x01\\x00\\x01'", b'FYgCi8tt34FxE8vq63jUlKLK9LHnuxqMa4MC2xnQUmI2z3rCkkftPHsI5BmY61+X9sTIgikI/AyCudRaxm613SvPy5s9/6yQr7XXRky3EfCWUzAcwuvDKuutaG0dDzuuB579Wx38YvWYWkO27ckJzS4ahoSuZeEVghSuIPs1kds=']
