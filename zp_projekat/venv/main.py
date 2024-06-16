@@ -755,7 +755,7 @@ def send_message_click(encryption_checked, algorithm, signature_checked, compres
 
         print(encrypted_session_key)
 
-        encryption_data = [encrypted_message, receiver_public_key, encrypted_session_key]
+        encryption_data = [encrypted_message, public_key, encrypted_session_key]
     elif not conversion_checked:
         encryption_data = [message]
 
@@ -797,6 +797,46 @@ def receive_message():
     if file_path:
         with open(file_path, 'r') as file:
             csv_content = file.readlines()
+
+        encryption_data = csv_content[4]
+        key_id = encryption_data[1]
+
+        for item in private_key_ring[logged_user["email"]]:
+            if str(item["key_id"]) == str(key_id):
+                print(item["key_id"])
+
+        eiv = private_key.encode('utf-8')[:CAST.block_size + 2]
+        ciphertext = private_key.encode('utf-8')[CAST.block_size + 2:]
+        decipher = CAST.new(logged_user["password"][:16], CAST.MODE_OPENPGP, eiv)
+
+        print(type(decipher))
+        print(type(ciphertext))
+        decrypted_key_bytes = decipher.decrypt(ciphertext)
+        print("Dekriptovani privatni kljuc:")
+        print(decrypted_key_bytes)
+        #print(type(decrypted_key_bytes.decode("utf-8")))
+        # print(base64.encodebytes(decrypted_key_bytes))
+
+        # private_key_pem = encode(base64.encodebytes(decrypted_key_bytes), "RSA PRIVATE KEY")
+        # print(private_key_pem)
+        # private_key_object = rsa.PrivateKey.load_pkcs1(decrypted_key_bytes, format='DER')
+
+        # pem_header = b'-----BEGIN RSA PRIVATE KEY-----\n'
+        # pem_footer = b'-----END RSA PRIVATE KEY-----'
+        # pem_content = pem_header + base64.encodebytes(decrypted_key_bytes) + pem_footer
+
+        # Ovde je jednostavan primer sa dummy vrednostima
+        n = int.from_bytes(decrypted_key_bytes[:256], 'big')
+        e = int.from_bytes(decrypted_key_bytes[256:260], 'big')
+        d = int.from_bytes(decrypted_key_bytes[260:516], 'big')
+        p = int.from_bytes(decrypted_key_bytes[516:644], 'big')
+        q = int.from_bytes(decrypted_key_bytes[644:772], 'big')
+        dmp1 = int.from_bytes(decrypted_key_bytes[772:900], 'big')
+        dmq1 = int.from_bytes(decrypted_key_bytes[900:1028], 'big')
+        iqmp = int.from_bytes(decrypted_key_bytes[1028:], 'big')
+
+        # Kreiranje PrivateKey objekta
+        private_key_object = rsa.PrivateKey(n, e, d, p, q)
 
         #AUTENTIKACIJA
         # print(csv_content)
