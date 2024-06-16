@@ -5,12 +5,14 @@ import hashlib
 import time
 import re
 from tkinter import messagebox, filedialog, ttk
-from Crypto.Cipher import CAST
+from Crypto.Cipher import CAST, DES3, AES
+from Crypto.Protocol.KDF import PBKDF2
 from Crypto.PublicKey import RSA
 import pem
 import base64
 import ast
 import csv
+from Crypto.Random import get_random_bytes
 from Crypto.IO.PEM import encode, decode
 
 
@@ -631,7 +633,7 @@ def send_message():
     message_text = tk.Text(root, width=40, height=10)
     message_text.pack(pady=10)
 
-    send_message_button = tk.Button(root, text="Send Message", command=lambda: send_message_click(encryption_checked.get(), selected_option_radio, signature_checked.get(), compress_checked.get(), conversion_checked.get(),
+    send_message_button = tk.Button(root, text="Send Message", command=lambda: send_message_click(encryption_checked.get(), selected_option_radio.get(), signature_checked.get(), compress_checked.get(), conversion_checked.get(),
                                                                                                   file_name.get(), file_path.get(),
                                                                                                     message_text.get("1.0", tk.END), private_key_entry.get(), selected_option.get().split(' ')[1]))
     send_message_button.pack(pady=10)
@@ -641,18 +643,19 @@ def send_message_click(encryption_checked, algorithm, signature_checked, compres
         message = message[:-1]
 
     data = [
-        ['timestamp', 'data', 'filename', 'signature', 'encryption'],
-        [time.time(), message, file_name]
+        ['timestamp', 'filename', 'signature', 'data', 'encryption'],
+        [time.time(), file_name]
     ]
 
     filename = file_path + "/" + file_name
 
     signature_data = []
+    encryption_data = []
 
     if signature_checked:
         timestamp = time.time()
         to_hash = message + "" + str(timestamp)
-        hashed_data = text_hashing(to_hash)
+        #hashed_data = text_hashing(to_hash)
 
         print(private_key)
 
@@ -663,7 +666,9 @@ def send_message_click(encryption_checked, algorithm, signature_checked, compres
         print(type(decipher))
         print(type(ciphertext))
         decrypted_key_bytes = decipher.decrypt(ciphertext)
-        print(type(decrypted_key_bytes.decode("utf-8")))
+        print("Dekriptovani privatni kljuc:")
+        print(decrypted_key_bytes)
+        #print(type(decrypted_key_bytes.decode("utf-8")))
         # print(base64.encodebytes(decrypted_key_bytes))
 
         # private_key_pem = encode(base64.encodebytes(decrypted_key_bytes), "RSA PRIVATE KEY")
@@ -690,8 +695,8 @@ def send_message_click(encryption_checked, algorithm, signature_checked, compres
         # decrypted_private_key = rsa.PrivateKey.load_pkcs1(pem_content)
 
         # crypto = rsa.encrypt(hashed_data, private_key_object)
-        hash = rsa.compute_hash(to_hash.encode(), 'SHA-1')
-        crypto = rsa.sign_hash(hash, private_key_object, 'SHA-1')
+        # hash = rsa.compute_hash(to_hash.encode(), 'SHA-1')
+        crypto = rsa.sign(to_hash.encode(), private_key_object, 'SHA-1')
 
         # hash_message = private_key_object.sign(
         #     bytes(to_hash, 'ascii'),
@@ -716,11 +721,46 @@ def send_message_click(encryption_checked, algorithm, signature_checked, compres
         signature_data = [timestamp, key_id, crypto[:2], crypto]
         data[1].append(signature_data)
 
-    encryption_data = []
+    if encryption_checked:
+        session_key = get_random_bytes(16)
+        timestamp = time.time()
+        message_to_encrypt = message + "" + str(timestamp)
+
+        salt = get_random_bytes(16)
+
+        cipher = None
+
+        if algorithm == 1:
+            key = PBKDF2(session_key, salt, dkLen=24)
+            cipher = DES3.new(key, DES3.MODE_EAX)
+        elif algorithm == 2:
+            key = PBKDF2(session_key, salt, dkLen=16)
+            cipher = AES.new(key, AES.MODE_EAX)
+
+        ciphertext, tag = cipher.encrypt_and_digest(message_to_encrypt.encode())
+        encrypted_message = cipher.nonce + tag + ciphertext
+
+        receiver_public_key = None
+        for key in public_key_ring.keys():
+            for elem in public_key_ring[key]:
+                if str(elem["key_id"]) == str(public_key):
+                    receiver_public_key = elem["public_key"]
+                    break
+
+        print(receiver_public_key)
+
+        encrypted_session_key = rsa.encrypt(session_key, receiver_public_key)
+
+        print(encrypted_session_key)
+
+        encryption_data = [encrypted_message, receiver_public_key, encrypted_session_key]
+    else:
+        encryption_data = [message]
+
+    data[1].append(encryption_data)
 
     with open(filename, 'w', newline='') as file:
         file.write(str(timestamp) + '\n')
-        file.write(message + '\n')
         file.write(filename + '\n')
         file.write(str(signature_data) + '\n')
         file.write(str(encryption_data) + '\n')
@@ -739,31 +779,32 @@ def receive_message():
         with open(file_path, 'r') as file:
             csv_content = file.readlines()
 
-
+        #AUTENTIKACIJA
         # print(csv_content)
-        signed_message = csv_content[1][0: len(csv_content[1]) - 1] + "" + csv_content[0][0: len(csv_content[0]) - 1]
-        print(signed_message)
-        msg_signature = csv_content[3].split(',')
-        print(msg_signature)
-        key_id = msg_signature[1][1:]
-        signature = msg_signature[3][1:len(msg_signature[3]) - 2]
-        print(signature)
+        # signed_message = csv_content[1][0: len(csv_content[1]) - 1] + "" + csv_content[0][0: len(csv_content[0]) - 1]
+        # print(signed_message)
+        # msg_signature = csv_content[3].split(',')
         # print(msg_signature)
-
-        public_key = None
-
-        for key in public_key_ring.keys():
-            for item in public_key_ring[key]:
-                print(key_id)
-                print(item["key_id"])
-                if(str(item["key_id"]) == str(key_id)):
-
-                    public_key = item["public_key"]
-                    break
-
-        message_hash = rsa.compute_hash(signed_message.encode('utf-8'), 'SHA-1')
-
-        rsa.verify(signed_message, signature.encode("utf-8"), public_key)
+        # key_id = msg_signature[1][1:]
+        # signature = msg_signature[3][1:len(msg_signature[3]) - 2]
+        # print(signature)
+        # # print(msg_signature)
+        #
+        # public_key = None
+        #
+        # for key in public_key_ring.keys():
+        #     for item in public_key_ring[key]:
+        #         print(key_id)
+        #         print(item["key_id"])
+        #         if(str(item["key_id"]) == str(key_id)):
+        #
+        #             public_key = item["public_key"]
+        #             break
+        #
+        # message_hash = rsa.compute_hash(signed_message.encode('utf-8'), 'SHA-1')
+        # print(public_key)
+        #
+        # rsa.verify(signed_message.encode('utf-8'), signature.encode("utf-8"), public_key)
 
         # public_key.verify(
         #     signature,
@@ -780,6 +821,8 @@ def receive_message():
         # msg_signature = msg_split[3][1: len(msg_split[3])]
 
         # print(msg_signature)
+
+
 
 # def create_message():
 #
