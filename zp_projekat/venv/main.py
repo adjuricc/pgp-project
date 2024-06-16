@@ -12,6 +12,7 @@ import pem
 import base64
 import ast
 import csv
+import gzip
 from Crypto.Random import get_random_bytes
 from Crypto.IO.PEM import encode, decode
 
@@ -651,6 +652,7 @@ def send_message_click(encryption_checked, algorithm, signature_checked, compres
 
     signature_data = []
     encryption_data = []
+    compressed_data = None
 
     if signature_checked:
         timestamp = time.time()
@@ -754,15 +756,32 @@ def send_message_click(encryption_checked, algorithm, signature_checked, compres
         print(encrypted_session_key)
 
         encryption_data = [encrypted_message, receiver_public_key, encrypted_session_key]
-    else:
+    elif not conversion_checked:
         encryption_data = [message]
 
     data[1].append(encryption_data)
 
+    if compress_checked:
+        data_to_compress = str(signature_data) + str(timestamp) + filename + message
+        compressed_data = gzip.compress(data_to_compress.encode('utf-8'))
+
+    if conversion_checked:
+        if compress_checked:
+            compressed_data = base64.b64encode(compressed_data)
+        else:
+            timestamp = base64.b64encode(timestamp)
+            filename = base64.b64encode(filename)
+            signature_data = base64.b64encode()
+
+        encryption_data = base64.b64encode(encryption_data)
+
     with open(filename, 'w', newline='') as file:
-        file.write(str(timestamp) + '\n')
-        file.write(filename + '\n')
-        file.write(str(signature_data) + '\n')
+        if compressed_data:
+            file.write(compressed_data)
+        else:
+            file.write(str(timestamp) + '\n')
+            file.write(filename + '\n')
+            file.write(str(signature_data) + '\n')
         file.write(str(encryption_data) + '\n')
 
 def receive_message():
