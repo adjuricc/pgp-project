@@ -820,11 +820,15 @@ def receive_message():
             csv_content = file.readlines()
 
         encryption_data = csv_content[3]
-        encryption_msg = encryption_data.split(", ")[0][1: len(encryption_data.split(',')[0])]
+        encryption_msg = (encryption_data.split(", ")[0][2: len(encryption_data.split(", ")[0])], encryption_data.split(", ")[1], encryption_data.split(", ")[2])
+        print("Encryption msg:")
         print(encryption_msg)
-        key_id = encryption_data.split(", ")[1][1: len(encryption_data.split(',')[1]) - 2]
+        key_id = encryption_data.split(", ")[3][1: len(encryption_data.split(',')[3]) - 2]
         key_id = key_id.replace('\\\\', '\\')
-        base_encrypted_key_session = encryption_data.split(', ')[2][1: len(encryption_data.split(',')[2]) - 3]
+        print("Key id:")
+        print(key_id)
+        base_encrypted_key_session = encryption_data.split(', ')[4][1: len(encryption_data.split(',')[4]) - 3]
+        print("Key session:")
         print(base_encrypted_key_session)
         encrypted_key_session = base64.b64decode(base_encrypted_key_session)
 
@@ -876,7 +880,17 @@ def receive_message():
 
         print(decrypted_session_key)
 
-        nonce, tag, ciphertext = encryption_msg
+        nonce = encryption_msg[0]
+        print("Nonce:")
+        print(nonce)
+        tag = encryption_msg[1]
+        print("Tag:")
+        print(tag)
+        ciphertext = encryption_msg[2]
+        print("Ciphertext:")
+        print(ciphertext)
+
+
         if(selected_option_alg.get() == 1):
             cipher_decrypt = DES3.new(decrypted_session_key, DES3.MODE_EAX, nonce=nonce)  # you can't reuse an object for encrypting or decrypting other data with the same key.
             # plaintext = cipher_decrypt.decrypt(encryption_msg.encode())
