@@ -1,4 +1,0 @@
-1718548471.7197878
-C:\Users\anjci\PycharmProjects\zp_projekat\venv\messages\p5.txt
-[]
-[b'\xc6\x83\xc2(\xdf+#\xe4\x0c\xc2b\xaei\xd0\x8e@\x98\xf5h\xbc\x86\xde\x15', "b'{\\x9a\\xf5\\x02\\x03\\x01\\x00\\x01'", b'Rk0RjmPZda9sLWacC6MVAYUlNMR13TQ0FPXttCBL+7+2Z9aFzBYDcpbHjTI/9mI7lLFcntzr5otz8NXJm2TznRfDPOIOdhRIKZ1Eyi8PMH7VSXcPK64jGBXo1c3cbMSbuX8g5IhReMGRuzrKSR67UPvwAMvSysOsiHFiL/kILZI=']
