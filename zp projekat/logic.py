@@ -1,11 +1,13 @@
 import models
 import re
+import os
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes
 
 users = []
+private_key_rings = []
 logged_user = None
 
 def register_action(username, email, password, set_status):
@@ -33,6 +35,25 @@ def register_action(username, email, password, set_status):
             logged_user = user
             users.append(logged_user)
             logged_user.print_user()
+
+            #creating directories
+
+            current_directory = os.path.dirname(os.path.abspath(__file__))
+
+            user_directory = os.path.join(current_directory, username)
+
+            send_directory = os.path.join(user_directory, 'send')
+            receive_directory = os.path.join(user_directory, 'receive')
+            export_directory = os.path.join(user_directory, 'export')
+
+            os.makedirs(send_directory, exist_ok=True)
+            os.makedirs(receive_directory, exist_ok=True)
+            os.makedirs(export_directory, exist_ok=True)
+
+            #adding user to private key rings
+
+            private_key_rings.append(models.PrivateKeyRing(email))
+
             set_status("Success")
 
 def login_action(username, password, set_status):
