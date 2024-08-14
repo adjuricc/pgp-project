@@ -13,6 +13,9 @@ class User:
     def add_key_pair(self, private_key, public_key):
         self.my_keys.append({'private_key': private_key, 'public_key': public_key})
 
+    def get_email(self):
+        return self.email
+
     def print_user(self):
         print(self.username, self.email, self.password, self.my_keys)
 
@@ -23,7 +26,13 @@ class PrivateKeyRing:
         self.user_keys = []
 
     def add_key(self, timestamp, key_id, public_key, private_key):
-        self.user_keys.append({'timestamp': timestamp, 'key_id': key_id, 'public_key': public_key, 'private_key': private_key})
+        self.user_keys.append({'timestamp': timestamp, 'key_id': key_id, 'public_key': public_key.public_numbers(), 'private_key': private_key})
+
+    def get_user_id(self):
+        return self.user_id
+
+    def get_user_keys(self):
+        return [list(key.values()) for key in self.user_keys]
 
     def print_ring(self):
         print("User: " + self.user_id)
@@ -41,3 +50,9 @@ class PublicKeyRing:
         self.key_id = key_id
         self.public_key = public_key
         self.user_id = user_id
+
+class Message:
+    def __init__(self, timestamp, filename, message):
+        self.timestamp = timestamp
+        self.filename = filename
+        self.message = message

@@ -148,9 +148,23 @@ def generate_key_pair_action(key_size, set_status):
 
                 key.add_key(time.time(), key_id, public_key, encrypted_private_key)
 
+                set_status("Success generating keys. ")
+
                 key.print_ring()
 
         #print(private_pem, public_pem)
+
+def get_private_key_ring(set_status):
+    global logged_user
+
+    if logged_user is None:
+        set_status("User must be logged in. ")
+
+    else:
+        for private_key_ring in private_key_rings:
+            if private_key_ring.get_user_id() == logged_user.get_email():
+                return private_key_ring
+    return None
 
 def send_msg_action():
     print("Send message button clicked")

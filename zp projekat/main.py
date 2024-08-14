@@ -16,6 +16,10 @@ def on_login_action(username, email):
 def on_generate_key_pair_action(key_size):
     logic.generate_key_pair_action(key_size, set_status)
 
+def on_keys_action():
+    print("hm")
+    return logic.get_private_key_ring(set_status)
+
 def main():
     global app_gui
     root = tk.Tk()
@@ -28,6 +32,7 @@ def main():
         'register': app_gui.register_page,
         'login': app_gui.login_page,
         'generate_key_pair': app_gui.generate_key_pair_page,
+        'keys': app_gui.keys_page,
         'send_msg': app_gui.send_message_page,
         'receive_msg': app_gui.receive_message_page,
         'import_keys': app_gui.import_keys_page,
@@ -41,6 +46,7 @@ def main():
     app_gui.set_register_action(on_register_action)
     app_gui.set_login_action(on_login_action)
     app_gui.set_generate_key_pair_action(on_generate_key_pair_action)
+    app_gui.set_keys_action(on_keys_action)
 
     root.mainloop()
 
