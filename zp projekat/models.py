@@ -22,7 +22,7 @@ class PrivateKeyRing:
         self.user_id = user_id
         self.user_keys = []
 
-    def add_key_(self, timestamp, key_id, public_key, private_key):
+    def add_key(self, timestamp, key_id, public_key, private_key):
         self.user_keys.append({'timestamp': timestamp, 'key_id': key_id, 'public_key': public_key, 'private_key': private_key})
 
     def print_ring(self):
@@ -31,7 +31,7 @@ class PrivateKeyRing:
         print("Keys:\n")
 
         for key in self.user_keys:
-            print(key.timestamp, key.key_id, key.public_key, key.private_key, key.user_id)
+            print(key["timestamp"], key["key_id"], key["public_key"], key["private_key"])
             print("\n")
 
 

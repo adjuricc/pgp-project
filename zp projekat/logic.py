@@ -1,10 +1,14 @@
 import models
 import re
 import os
+import time
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes
+from Crypto.Cipher import CAST
+from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
 
 users = []
 private_key_rings = []
@@ -86,7 +90,7 @@ def generate_key_pair_action(key_size, set_status):
         public_key = private_key.public_key()
         logged_user.add_key_pair(private_key, public_key)
 
-        logged_user.print_user()
+        #logged_user.print_user()
 
         private_pem = private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
@@ -98,7 +102,55 @@ def generate_key_pair_action(key_size, set_status):
             format=serialization.PublicFormat.SubjectPublicKeyInfo
         )
 
-        print(private_pem, public_pem)
+        for key in private_key_rings:
+            if key.user_id == logged_user.email:
+                # Serijalizacija javnog ključa u PEM ili DER format (izaberite DER za bajtove)
+                public_key_bytes = public_key.public_bytes(
+                    encoding=serialization.Encoding.DER,
+                    format=serialization.PublicFormat.SubjectPublicKeyInfo
+                )
+
+                # Kreiranje key id
+                # Konvertovanje bajtova u integer (bajtova niz u broj)
+                public_key_int = int.from_bytes(public_key_bytes, byteorder='big')
+                # Izdvajanje poslednjih 64 bita
+                key_id = public_key_int & ((1 << 64) - 1)
+
+                # Kreiranje SHA-1 objekta
+                digest = hashes.Hash(hashes.SHA1())
+
+                # Dodavanje podataka koje želite da heširate
+                digest.update(logged_user.password)
+
+                # Dobijanje heš vrednosti
+                hash_value = digest.finalize()
+
+                cast_key = hash_value[:16]  # CAST-128 ključ mora biti između 5 i 16 bajtova
+
+                # Generisanje vektora inicijalizacije (IV)
+                iv = get_random_bytes(8)  # CAST-128 koristi 8-bajtni IV
+
+                # Kreiranje CAST-128 objekta za šifrovanje
+                cipher = CAST.new(cast_key, CAST.MODE_CBC, iv)
+
+                # Serijalizacija privatnog ključa u bajtove (PEM format bez enkripcije)
+                private_key_bytes = private_key.private_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PrivateFormat.TraditionalOpenSSL,
+                    encryption_algorithm=serialization.NoEncryption()
+                )
+
+                # Padding podataka (CAST-128 koristi blokove od 8 bajtova)
+                padded_data = pad(private_key_bytes, CAST.block_size)
+
+                # Korak 3: Šifrovanje privatnog ključa
+                encrypted_private_key = cipher.encrypt(padded_data)
+
+                key.add_key(time.time(), key_id, public_key, encrypted_private_key)
+
+                key.print_ring()
+
+        #print(private_pem, public_pem)
 
 def send_msg_action():
     print("Send message button clicked")
