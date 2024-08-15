@@ -45,11 +45,25 @@ class PrivateKeyRing:
 
 
 class PublicKeyRing:
-    def __init__(self, timestamp, key_id, public_key, user_id):
-        self.timestamp = timestamp
-        self.key_id = key_id
-        self.public_key = public_key
-        self.user_id = user_id
+    def __init__(self, user_id):
+        user = user_id
+        self.keys = []
+
+    def add_key(self, user_id, timestamp, key_id, public_key):
+        self.keys.append({'user_id': user_id, 'timestamp': timestamp, 'key_id': key_id, 'public_key': public_key.public_numbers()})
+
+    def get_user_keys(self):
+        return [list(key.values()) for key in self.keys]
+
+    def print_ring(self):
+        print("User: " + self.user)
+        print("\n")
+        print("Keys:\n")
+
+        for key in self.keys:
+            print(key["user_id"], key["timestamp"], key["key_id"], key["public_key"])
+            print("\n")
+
 
 class Message:
     def __init__(self, timestamp, filename, message):

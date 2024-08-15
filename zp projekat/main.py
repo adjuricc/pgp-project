@@ -17,8 +17,13 @@ def on_generate_key_pair_action(key_size):
     logic.generate_key_pair_action(key_size, set_status)
 
 def on_keys_action():
-    print("hm")
     return logic.get_private_key_ring(set_status)
+
+def on_public_keys_action():
+    return logic.get_public_key_ring(set_status)
+
+def on_send_message_action(filename, filepath, encryption_var, signature_var, compress_var, radix64_var, encryption_option, signature_option, enc_input, signature_input, message):
+    return logic.send_message_action(filename, filepath, encryption_var, signature_var, compress_var, radix64_var, encryption_option, signature_option, enc_input, signature_input, message, set_status)
 
 def main():
     global app_gui
@@ -47,6 +52,8 @@ def main():
     app_gui.set_login_action(on_login_action)
     app_gui.set_generate_key_pair_action(on_generate_key_pair_action)
     app_gui.set_keys_action(on_keys_action)
+    app_gui.set_public_keys_action(on_public_keys_action)
+    app_gui.set_send_message_action(on_send_message_action)
 
     root.mainloop()
 

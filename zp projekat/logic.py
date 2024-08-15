@@ -9,9 +9,14 @@ from cryptography.hazmat.primitives import hashes
 from Crypto.Cipher import CAST
 from Crypto.Random import get_random_bytes
 from Crypto.Util.Padding import pad, unpad
+from Crypto.Cipher import DES3
+
+import secrets
+from cryptography.hazmat.backends import default_backend
 
 users = []
 private_key_rings = []
+public_key_rings = []
 logged_user = None
 
 def register_action(username, email, password, set_status):
@@ -166,8 +171,123 @@ def get_private_key_ring(set_status):
                 return private_key_ring
     return None
 
-def send_msg_action():
-    print("Send message button clicked")
+def get_public_key_ring(set_status):
+    global logged_user
+
+    if logged_user is None:
+        set_status("User must be logged in. ")
+    else:
+        for public_key_ring in public_key_rings:
+            if public_key_ring.user == logged_user.email:
+                return public_key_ring
+    return None
+
+def send_message_action(filename, filepath, encryption_var, signature_var, compress_var, radix64_var, encryption_option, signature_option, enc_input, signature_input, message, set_status):
+    global logged_user
+
+    if logged_user is None:
+        set_status("User must be logged in. ")
+    elif filename.get() is None and filepath.get() is None:
+        set_status("Fields with * are mandatory. ")
+    else:
+        if encryption_var.get():
+            if enc_input.get() is None:
+                set_status("Please input user id for encryption. ")
+            else:
+                user_id = enc_input.get()
+                email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+
+                if not re.match(email_pattern, user_id):
+                    set_status("Invalid format for user id. ")
+                else:
+                    for user in users:
+                        print(user.email)
+                        print(user_id)
+                        if user.email == user_id:
+                            # treba da proverimo da li ima generisan par kljuceva uopste
+                            if len(user.my_keys) == 0:
+                                set_status("Can't send the message. ")
+                            else:
+                                # ako ima generisemo random sesijski kljuc
+                                session_key = secrets.token_bytes(16)
+                                # sesijskim kljucem kriptujemo poruku
+
+                                if encryption_option.get() == 1:
+                                    print("TripleDES")
+
+                                    print(message.get("1.0", "end-1c"))
+
+                                    message_bytes = message.get("1.0", "end-1c").encode('utf-8')
+
+                                    cipher = DES3.new(session_key, DES3.MODE_CBC)
+
+                                    # Encrypt the data
+                                    iv = cipher.iv  # Initialization Vector (IV)
+                                    ciphertext = cipher.encrypt(pad(message_bytes, DES3.block_size))
+
+                                    print(f'Ciphertext: {ciphertext.hex()}')
+
+                                    print(session_key)
+
+                                    # sesijski kljuc kriptujemo pomocu rsa koristeci javni kljuc od primaoca, dodamo kljuc poruci
+                                    session_key_ciphertxt = user.my_keys[0]["public_key"].encrypt(
+                                        session_key,
+                                        padding.OAEP(
+                                            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                                            algorithm=hashes.SHA256(),
+                                            label=None
+                                        )
+                                    )
+
+                                    print(f"Ciphertext Ks: {session_key_ciphertxt.hex()}")
+
+                                    # treba da dodamo nas javni kljuc u njihov public key ring
+                                    for public_key_ring in public_key_rings:
+                                        if public_key_ring.user == user.email:
+                                            public_key_bytes = user.my_keys[0]["public_key"].public_bytes(
+                                                encoding=serialization.Encoding.DER,
+                                                format=serialization.PublicFormat.SubjectPublicKeyInfo
+                                            )
+
+                                            # Kreiranje key id
+                                            # Konvertovanje bajtova u integer (bajtova niz u broj)
+                                            public_key_int = int.from_bytes(public_key_bytes, byteorder='big')
+                                            # Izdvajanje poslednjih 64 bita
+                                            key_id = public_key_int & ((1 << 64) - 1)
+
+                                            public_key_ring.add_key(logged_user.email, time.time(), key_id, user.my_keys[0]["public_key"])
+
+                                            public_key_ring.print_ring()
+
+                                            break
+
+
+                                    # DEKRIPCIJA
+
+                                    # session_key_plaintext = user.my_keys[0]["private_key"].decrypt(
+                                    #     ciphertext,
+                                    #     padding.OAEP(
+                                    #         mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                                    #         algorithm=hashes.SHA256(),
+                                    #         label=None
+                                    #     )
+                                    # )
+                                    #
+                                    # print(f"Decrypted message: {session_key_plaintext.decode()}")
+
+                                    # Decrypt the data
+                                    cipher_decrypt = DES3.new(session_key, DES3.MODE_CBC, iv=iv)
+                                    plaintext = unpad(cipher_decrypt.decrypt(ciphertext), DES3.block_size)
+
+                                    print(f'Plaintext: {plaintext.decode()}')
+                                elif encryption_option.get() == 2:
+                                    print("CAST5")
+
+                            break
+                        else:
+                            set_status("User not found. ")
+
+
 
 def receive_msg_action():
     print("Receive message button clicked")

@@ -60,6 +60,9 @@ class AppGUI:
         self.login_action_callback = None
         self.generate_key_pair_action_callback = None
         self.keys_action_callback = None
+        self.public_keys_action_callback = None
+        self.send_message_callback = None
+        self.receive_message_callback = None
 
     def set_status(self, message):
         self.status.config(text=message)
@@ -205,8 +208,8 @@ class AppGUI:
     def set_keys_action(self, callback):
         self.keys_action_callback = callback
 
-    def handle_keys(self):
-        print("")
+    def set_public_keys_action(self, callback):
+        self.public_keys_action_callback = callback
 
     def keys_page(self):
         self.clear_main()
@@ -214,7 +217,11 @@ class AppGUI:
         public_key_ring = None
 
         if self.keys_action_callback:
-            public_key_ring = self.keys_action_callback()
+            private_key_ring = self.keys_action_callback()
+            public_key_ring = self.public_keys_action_callback()
+
+            if public_key_ring is not None:
+                public_key_ring.print_ring()
 
         columns = ('#1', '#2', '#3', '#4', '#5')
 
@@ -235,9 +242,9 @@ class AppGUI:
         tree.column('#4', width=100, anchor=tk.CENTER)
         tree.column('#5', width=100, anchor=tk.CENTER)
 
-        if public_key_ring is not None:
-            user_id = public_key_ring.get_user_id()
-            for item in public_key_ring.get_user_keys():
+        if private_key_ring is not None:
+            user_id = private_key_ring.get_user_id()
+            for item in private_key_ring.get_user_keys():
                 row = []
                 row.append(user_id)
                 for i in item:
@@ -247,21 +254,46 @@ class AppGUI:
         # Pack the Treeview widget (table)
         tree.pack(pady=20)
 
-    def set_send_message_action(self):
-        print("")
+        columns2 = ('#1', '#2', '#3', '#4')
+
+        # Create Treeview widget (table)
+        tree2 = ttk.Treeview(self.main, columns=columns2, show='headings')
+
+        # Define headings
+        tree2.heading('#1', text='user id')
+        tree2.heading('#2', text='timestamp')
+        tree2.heading('#3', text='key id')
+        tree2.heading('#4', text='public key')
+
+        # Define column width and alignment
+        tree2.column('#1', width=100, anchor=tk.CENTER)
+        tree2.column('#2', width=100, anchor=tk.CENTER)
+        tree2.column('#3', width=100, anchor=tk.CENTER)
+        tree2.column('#4', width=100, anchor=tk.CENTER)
+
+        if public_key_ring is not None:
+            for item in public_key_ring.get_user_keys():
+                tree.insert('', tk.END, values=item)
+
+        # Pack the Treeview widget (table)
+        tree2.pack(pady=20)
+
+    def set_send_message_action(self, callback):
+        self.send_message_callback = callback
 
     def handle_send_message(self):
-        print("")
+        if self.send_message_callback:
+            self.send_message_callback(self.filename_input, self.filepath_input, self.encryption_var, self.signature_var, self.compress_var, self.radix64_var, self.encryption_option, self.signature_option, self.enc_input, self.signature_input, self.message)
 
     def send_message_page(self):
         self.clear_main()
 
-        self.filename_label = tk.Label(self.main, text="Filename:")
+        self.filename_label = tk.Label(self.main, text="* Filename:")
         self.filename_label.grid(row=1, column=0, padx=5, pady=15, sticky=tk.E)
         self.filename_input = tk.Entry(self.main)
         self.filename_input.grid(row=1, column=1, padx=5, pady=15, sticky=tk.W)
 
-        self.filepath_label = tk.Label(self.main, text="Filepath:")
+        self.filepath_label = tk.Label(self.main, text="* Filepath:")
         self.filepath_label.grid(row=2, column=0, padx=5, pady=15, sticky=tk.E)
         self.filepath_input = tk.Entry(self.main)
         self.filepath_input.grid(row=2, column=1, padx=5, pady=15, sticky=tk.W)
@@ -278,7 +310,7 @@ class AppGUI:
 
         self.encryption_option = tk.IntVar()
         self.enc_radio1 = tk.Radiobutton(self.main, text="TripleDES", variable=self.encryption_option, value=1, state=tk.DISABLED)
-        self.enc_radio2 = tk.Radiobutton(self.main, text="AES128", variable=self.encryption_option, value=2, state=tk.DISABLED)
+        self.enc_radio2 = tk.Radiobutton(self.main, text="CAST5", variable=self.encryption_option, value=2, state=tk.DISABLED)
         self.enc_radio1.grid(row=5, column=2, padx=5, pady=5, sticky=tk.W)
         self.enc_radio2.grid(row=5, column=3, padx=5, pady=5, sticky=tk.W)
         self.enc_label = tk.Label(self.main, text="Public key:")
@@ -288,7 +320,6 @@ class AppGUI:
 
         self.encryption_checkbox = tk.Checkbutton(self.main, text="Encryption", variable=self.encryption_var, command= self.toggle_encryption_radio_buttons)
         self.encryption_checkbox.grid(row=4, column=1, padx=5, pady=5, sticky=tk.W)
-
 
         self.signature_option = tk.IntVar()
         self.signature_radio1 = tk.Radiobutton(self.main, text="RSA", variable=self.signature_option, value=1, state=tk.DISABLED)
@@ -308,10 +339,10 @@ class AppGUI:
         self.radix64_checkbox = tk.Checkbutton(self.main, text="Convert to radix64", variable=self.radix64_var)
         self.radix64_checkbox.grid(row=11, column=1, padx=5, pady=5, sticky=tk.W)
 
-        message = tk.Text(self.main, height=5, width=20)  # Create a Text widget with specific dimensions
-        message.grid(row=12, column= 1, padx=10, pady=10, sticky=tk.W)
+        self.message = tk.Text(self.main, height=5, width=20)  # Create a Text widget with specific dimensions
+        self.message.grid(row=12, column= 1, padx=10, pady=10, sticky=tk.W)
 
-        self.send_button = tk.Button(self.main, text="Send")
+        self.send_button = tk.Button(self.main, text="Send", command=self.handle_send_message)
         self.send_button.grid(row=12, column=2, padx=5, pady=5, sticky=tk.W)
 
 
