@@ -25,6 +25,12 @@ def on_public_keys_action():
 def on_send_message_action(filename, filepath, encryption_var, signature_var, compress_var, radix64_var, encryption_option, signature_option, enc_input, signature_input, message):
     return logic.send_message_action(filename, filepath, encryption_var, signature_var, compress_var, radix64_var, encryption_option, signature_option, enc_input, signature_input, message, set_status)
 
+def on_export_action(username, public_key, private_key, option):
+    return logic.export_keys_action(username, public_key, private_key, option)
+
+def on_import_action(filepath):
+    return logic.import_keys_action(filepath)
+
 def main():
     global app_gui
     root = tk.Tk()
@@ -54,6 +60,8 @@ def main():
     app_gui.set_keys_action(on_keys_action)
     app_gui.set_public_keys_action(on_public_keys_action)
     app_gui.set_send_message_action(on_send_message_action)
+    app_gui.set_export_action(on_export_action)
+    app_gui.set_import_action(on_import_action)
 
     root.mainloop()
 

@@ -1,5 +1,6 @@
 import tkinter as tk
-from tkinter import ttk
+import logic
+from tkinter import ttk, filedialog
 
 class AppGUI:
     def __init__(self, root):
@@ -63,6 +64,8 @@ class AppGUI:
         self.public_keys_action_callback = None
         self.send_message_callback = None
         self.receive_message_callback = None
+        self.export_callback = None
+        self.import_callback = None
 
     def set_status(self, message):
         self.status.config(text=message)
@@ -370,11 +373,75 @@ class AppGUI:
     def receive_message_page(self):
         print("receive page")
 
+    def set_import_action(self, callback):
+        self.import_callback = callback
+    def handle_import(self):
+        if self.import_callback:
+            self.import_callback(self.file_path)
     def import_keys_page(self):
         print("import page")
+        self.clear_main()
+        self.main.grid_propagate(False)
 
+        self.file_path = filedialog.askopenfilename(
+            title="Izaberi fajl",
+            filetypes=[("Tekstualni fajlovi", "*.txt"), ("Svi fajlovi", "*.*")]
+        )
+
+        self.import_button = tk.Button(self.main, text="Import", command=self.handle_import)
+        self.import_button.grid(row=4, column=2, padx=10, pady=15, sticky=tk.E)
+
+    def set_export_action(self, callback):
+        self.export_callback = callback
+    def handle_export(self):
+        if self.export_callback:
+            self.export_callback(logic.logged_user.username, logic.logged_user.my_keys[int(self.option_var.get().split(" ")[2])]["public_key"], logic.logged_user.my_keys[int(self.option_var.get().split(" ")[2])]["private_key"], self.radio_var.get())
     def export_keys_page(self):
         print("export page")
+
+        self.clear_main()
+        self.main.grid_propagate(False)
+
+        # Podešavanje grid sistema
+        self.main.grid_columnconfigure(0, weight=1)  # Prazan prostor levo
+        self.main.grid_columnconfigure(1, weight=0)  # Kolona sa labelama
+        self.main.grid_columnconfigure(2, weight=0)  # Kolona sa unosima
+        self.main.grid_columnconfigure(3, weight=1)  # Prazan prostor desno
+
+        self.main.grid_rowconfigure(0, weight=1)  # Prazan prostor gore
+        self.main.grid_rowconfigure(1, weight=0)  # Red sa labelom
+        self.main.grid_rowconfigure(2, weight=0)  # Red sa radio dugmadima
+        self.main.grid_rowconfigure(3, weight=0)  # Red sa OptionMenu
+        self.main.grid_rowconfigure(4, weight=0)  # Red sa dugmetom
+        self.main.grid_rowconfigure(5, weight=1)  # Prazan prostor dole
+
+        # Labela: "Izaberi jednu od dve opcije"
+        self.option_label = tk.Label(self.main, text="Izaberi jednu od dve opcije:")
+        self.option_label.grid(row=1, column=1, padx=5, pady=15, sticky=tk.W)
+
+        # Radio dugmad
+        self.radio_var = tk.StringVar(value="Javni i privatni")
+        self.radio1 = tk.Radiobutton(self.main, text="I javni i privatni", variable=self.radio_var, value="Javni i privatni")
+        self.radio1.grid(row=2, column=1, padx=5, pady=5, sticky=tk.W)
+        self.radio2 = tk.Radiobutton(self.main, text="Samo javni", variable=self.radio_var, value="Samo javni")
+        self.radio2.grid(row=2, column=2, padx=5, pady=5, sticky=tk.W)
+
+        # OptionMenu
+        options = []
+        i = 0
+        if logic.logged_user:
+            for key in logic.logged_user.my_keys:
+                options.append("Key pair " + str(i))
+                i = i + 1
+
+        if len(options) > 0:
+            self.option_var = tk.StringVar(value=options[0])
+            self.option_menu = tk.OptionMenu(self.main, self.option_var, *options)
+            self.option_menu.grid(row=3, column=1, columnspan=2, padx=5, pady=15, sticky=tk.W)
+
+        # Dugme: "Export"
+        self.export_button = tk.Button(self.main, text="Export", command=self.handle_export)
+        self.export_button.grid(row=4, column=2, padx=10, pady=15, sticky=tk.E)
 
 if __name__ == '__main__':
     print("Can't run this file. Try main.py")

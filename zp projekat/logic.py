@@ -18,7 +18,7 @@ users = []
 private_key_rings = []
 public_key_rings = []
 logged_user = None
-
+num_of_exports = []
 def register_action(username, email, password, set_status):
     global logged_user
     print("Register button clicked")
@@ -62,6 +62,8 @@ def register_action(username, email, password, set_status):
             #adding user to private key rings
 
             private_key_rings.append(models.PrivateKeyRing(email))
+
+            num_of_exports.append({"username": username, "num": 0})
 
             set_status("Success")
 
@@ -292,11 +294,82 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
 def receive_msg_action():
     print("Receive message button clicked")
 
-def import_keys_action():
+def import_keys_action(filepath):
     print("Import keys button clicked")
 
-def export_keys_action():
+    with open(filepath, "rb") as file:
+        key_data = file.read()
+
+    # Odvajanje privatnog i javnog ključa (ako su u istom fajlu)
+    private_key_pem = key_data.split(b"-----END RSA PRIVATE KEY-----")[0] + b"-----END RSA PRIVATE KEY-----"
+    public_key_pem = key_data.split(b"-----END PUBLIC KEY-----")[0].split(b"-----END RSA PRIVATE KEY-----")[1] + b"-----END PUBLIC KEY-----"
+
+    # Deserializacija privatnog ključa
+    private_key = serialization.load_pem_private_key(
+        private_key_pem,
+        password=None,
+        backend=default_backend()
+    )
+
+    # Deserializacija javnog ključa
+    public_key = serialization.load_pem_public_key(
+        public_key_pem,
+        backend=default_backend()
+    )
+
+    logged_user.add_key_pair(private_key, public_key)
+
+    for ring in private_key_rings:
+        if ring.user_id == logged_user.email:
+            public_key_bytes = public_key.public_bytes(
+                encoding=serialization.Encoding.DER,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo
+            )
+
+            # Kreiranje key id
+            # Konvertovanje bajtova u integer (bajtova niz u broj)
+            public_key_int = int.from_bytes(public_key_bytes, byteorder='big')
+            # Izdvajanje poslednjih 64 bita
+            key_id = public_key_int & ((1 << 64) - 1)
+
+            ring.add_key(time.time(), key_id, public_key, private_key)
+
+            ring.print_ring()
+            break
+
+
+def export_keys_action(username, public_key, private_key, option):
     print("Export keys button clicked")
+
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+    public_pem = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+
+    for export in num_of_exports:
+        if export["username"] == username:
+            export["num"] = export["num"] + 1
+
+            filename = username + " export " + str(export["num"]) + ".txt"
+            current_directory = os.path.dirname(os.path.abspath(__file__))
+            user_directory = os.path.join(current_directory, username)
+            export_directory = os.path.join(user_directory, "export")
+            file_path = os.path.join(export_directory, filename)
+
+            with open(file_path, mode='wb') as file:
+                if option == "Javni i privatni":
+                    file.write(private_pem)
+                file.write(public_pem)
+
+            break
+
+
+
 
 def log_out_action():
     global logged_user
