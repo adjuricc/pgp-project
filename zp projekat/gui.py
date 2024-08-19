@@ -276,7 +276,7 @@ class AppGUI:
 
         if public_key_ring is not None:
             for item in public_key_ring.get_user_keys():
-                tree.insert('', tk.END, values=item)
+                tree2.insert('', tk.END, values=item)
 
         # Pack the Treeview widget (table)
         tree2.pack(pady=20)

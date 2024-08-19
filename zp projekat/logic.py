@@ -1,4 +1,5 @@
 import models
+import json
 import re
 import os
 import time
@@ -212,14 +213,22 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
                             else:
                                 # ako ima generisemo random sesijski kljuc
                                 session_key = secrets.token_bytes(16)
+
+                                # napravimo message koji se sastoji od filename, timestamp i data
+                                msg = {
+                                    "filename": filename.get(),
+                                    "timestamp": time.time(),
+                                    "data": message.get("1.0", "end-1c")
+                                }
+
                                 # sesijskim kljucem kriptujemo poruku
 
                                 if encryption_option.get() == 1:
                                     print("TripleDES")
 
-                                    print(message.get("1.0", "end-1c"))
+                                    print(msg["filename"], msg["timestamp"], msg["data"])
 
-                                    message_bytes = message.get("1.0", "end-1c").encode('utf-8')
+                                    message_bytes = (json.dumps(msg)).encode('utf-8')
 
                                     cipher = DES3.new(session_key, DES3.MODE_CBC)
 
@@ -241,29 +250,65 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
                                         )
                                     )
 
+                                    recipient_public_key_bytes = user.my_keys[0]["public_key"].public_bytes(
+                                        encoding=serialization.Encoding.DER,
+                                        format=serialization.PublicFormat.SubjectPublicKeyInfo
+                                    )
+                                    recipient_public_key_int = int.from_bytes(recipient_public_key_bytes, byteorder='big')
+
+                                    recipient_key_id = recipient_public_key_int & ((1 << 64) - 1)
+
+
+                                    current_directory = os.path.dirname(os.path.abspath(__file__))
+                                    user_directory = os.path.join(current_directory, user.username)
+                                    export_directory = os.path.join(user_directory, "receive")
+                                    file_path = os.path.join(export_directory, filename.get())
+
+                                    print(file_path)
+
+                                    with open(file_path, mode='wb') as file:
+                                            file.write("message".encode('utf-8'))
+                                            file.write(ciphertext)
+                                            file.write("session key component".encode('utf-8'))
+                                            file.write(recipient_key_id.to_bytes(8, byteorder='big'))
+                                            file.write(session_key_ciphertxt)
+
                                     print(f"Ciphertext Ks: {session_key_ciphertxt.hex()}")
+
+                                    found = False
 
                                     # treba da dodamo nas javni kljuc u njihov public key ring
                                     for public_key_ring in public_key_rings:
                                         if public_key_ring.user == user.email:
-                                            public_key_bytes = user.my_keys[0]["public_key"].public_bytes(
+                                            public_key_bytes = logged_user.my_keys[0]["public_key"].public_bytes(
                                                 encoding=serialization.Encoding.DER,
                                                 format=serialization.PublicFormat.SubjectPublicKeyInfo
                                             )
-
-                                            # Kreiranje key id
-                                            # Konvertovanje bajtova u integer (bajtova niz u broj)
                                             public_key_int = int.from_bytes(public_key_bytes, byteorder='big')
-                                            # Izdvajanje poslednjih 64 bita
+
                                             key_id = public_key_int & ((1 << 64) - 1)
 
-                                            public_key_ring.add_key(logged_user.email, time.time(), key_id, user.my_keys[0]["public_key"])
+                                            public_key_ring.add_key(logged_user.email, time.time(), key_id, logged_user.my_keys[0]["public_key"])
 
-                                            public_key_ring.print_ring()
+                                            found = True
 
                                             break
 
+                                    if not found:
+                                        public_key_bytes = logged_user.my_keys[0]["public_key"].public_bytes(
+                                            encoding=serialization.Encoding.DER,
+                                            format=serialization.PublicFormat.SubjectPublicKeyInfo
+                                        )
 
+                                        public_key_int = int.from_bytes(public_key_bytes, byteorder='big')
+
+                                        key_id = public_key_int & ((1 << 64) - 1)
+
+                                        public_key_ring = models.PublicKeyRing(user_id)
+                                        public_key_ring.add_key(logged_user.email, time.time(), key_id, logged_user.my_keys[0]["public_key"])
+                                        public_key_rings.append(public_key_ring)
+
+                                    print(public_key_rings)
                                     # DEKRIPCIJA
 
                                     # session_key_plaintext = user.my_keys[0]["private_key"].decrypt(
@@ -360,6 +405,8 @@ def export_keys_action(username, public_key, private_key, option):
             user_directory = os.path.join(current_directory, username)
             export_directory = os.path.join(user_directory, "export")
             file_path = os.path.join(export_directory, filename)
+
+            print(file_path)
 
             with open(file_path, mode='wb') as file:
                 if option == "Javni i privatni":

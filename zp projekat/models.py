@@ -46,10 +46,11 @@ class PrivateKeyRing:
 
 class PublicKeyRing:
     def __init__(self, user_id):
-        user = user_id
+        self.user = user_id
         self.keys = []
 
     def add_key(self, user_id, timestamp, key_id, public_key):
+        print("??")
         self.keys.append({'user_id': user_id, 'timestamp': timestamp, 'key_id': key_id, 'public_key': public_key.public_numbers()})
 
     def get_user_keys(self):
