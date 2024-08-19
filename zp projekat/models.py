@@ -71,3 +71,4 @@ class Message:
         self.timestamp = timestamp
         self.filename = filename
         self.message = message
+        self.signature = None

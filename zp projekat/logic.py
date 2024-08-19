@@ -221,6 +221,32 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
                                     "data": message.get("1.0", "end-1c")
                                 }
 
+                                # AUTENTIKACIJA
+                                if signature_var:
+                                    # Kreiranje SHA-1 objekta
+                                    digest = hashes.Hash(hashes.SHA1())
+
+                                    # Dodavanje podataka koje želite da heširate
+                                    message_bytes = (json.dumps(msg)).encode('utf-8')
+                                    digest.update(message_bytes)
+
+                                    # Dobijanje heš vrednosti
+                                    hashed_message = digest.finalize()
+
+                                    private_key = serialization.load_der_private_key(
+                                        signature_input,
+                                        password=None,
+                                        backend=default_backend()
+                                    )
+
+                                    signature = private_key.sign(
+                                        hashed_message,
+                                        padding.PKCS1v15(),
+                                        hashes.SHA1()
+                                    )
+
+                                    msg.signature = signature
+
                                 # sesijskim kljucem kriptujemo poruku
 
                                 if encryption_option.get() == 1:
