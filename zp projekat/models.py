@@ -72,3 +72,5 @@ class Message:
         self.filename = filename
         self.message = message
         self.signature = None
+        self.public_key_id = None
+        self.sender_id = None

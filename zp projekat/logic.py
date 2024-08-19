@@ -245,7 +245,20 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
                                         hashes.SHA1()
                                     )
 
+                                    msg.sender_id = logged_user.email
                                     msg.signature = signature
+                                    found = False
+
+                                    for ring in private_key_rings:
+                                        if ring.user_id == logged_user.email:
+                                            for elem in ring.user_keys:
+                                                if elem["private_key"] == signature_input:
+                                                    msg.public_key_id = elem["key_id"]
+                                                    found = True
+                                                    break
+
+                                            if found:
+                                                break
 
                                 # sesijskim kljucem kriptujemo poruku
 
@@ -362,8 +375,43 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
 
 
 
-def receive_msg_action():
-    print("Receive message button clicked")
+def receive_msg_action(message):
+    # AUTENTIKACIJA
+
+    found = False
+    public_key = None
+
+    for ring in private_key_rings:
+        if ring.user_id == message.sender_id:
+            for elem in ring.user_keys:
+                if elem["key_id"] == message.public_key_id:
+                    public_key = elem["public_key"]
+                    found = True
+                    break
+
+            if found:
+                break
+
+    digest = hashes.Hash(hashes.SHA1())
+    digest.update(message)
+    hash_code = digest.finalize()
+
+    # 3. Verifikacija potpisa pomoću javnog ključa
+    try:
+        public_key.verify(
+            message.signature,
+            hash_code,
+            padding.PKCS1v15(),
+            hashes.SHA1()
+        )
+        print("Potpis je validan. Poruka je autentična.")
+    except Exception as e:
+        print("Potpis nije validan. Poruka možda nije autentična ili je izmenjena.")
+
+
+
+
+
 
 def import_keys_action(filepath):
     print("Import keys button clicked")
