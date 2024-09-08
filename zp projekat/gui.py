@@ -286,7 +286,7 @@ class AppGUI:
 
     def handle_send_message(self):
         if self.send_message_callback:
-            self.send_message_callback(self.filename_input, self.filepath_input, self.encryption_var, self.signature_var, self.compress_var, self.radix64_var, self.encryption_option, self.signature_option, self.enc_input, self.signature_input, self.message)
+            self.send_message_callback(self.filename_input, self.filepath_input, self.encryption_var, self.signature_var, self.compress_var, self.radix64_var, self.encryption_option, self.signature_option, self.enc_input, self.signature_option_var.get(), self.message)
 
     def send_message_page(self):
         self.clear_main()
@@ -331,8 +331,21 @@ class AppGUI:
         self.signature_radio2.grid(row=8, column=3, padx=5, pady=5, sticky=tk.W)
         self.signature_label = tk.Label(self.main, text="Private key:")
         self.signature_label.grid(row=9, column=2, padx=5, pady=15, sticky=tk.E)
-        self.signature_input = tk.Entry(self.main, state=tk.DISABLED)
-        self.signature_input.grid(row=9, column=3, padx=5, pady=15, sticky=tk.W)
+        # self.signature_input = tk.Entry(self.main, state=tk.DISABLED)
+        # self.signature_input.grid(row=9, column=3, padx=5, pady=15, sticky=tk.W)
+
+        signature_options = []
+        i = 0
+        if logic.logged_user:
+            for key in logic.logged_user.my_keys:
+                signature_options.append("Private key " + str(i))
+                i = i + 1
+
+        if len(signature_options) > 0:
+            self.signature_option_var = tk.StringVar(value=signature_options[0])
+            self.signature_option_menu = tk.OptionMenu(self.main, self.signature_option_var, *signature_options)
+            self.signature_option_menu.grid(row=9, column=3, padx=5, pady=15, sticky=tk.W)
+
         self.signature_checkbox = tk.Checkbutton(self.main, text="Signature", variable=self.signature_var, command= self.toggle_signature_radio_buttons)
         self.signature_checkbox.grid(row=7, column=1, padx=5, pady=5, sticky=tk.W)
 
@@ -364,11 +377,11 @@ class AppGUI:
         if self.signature_var.get():  # If the checkbox is checked
             self.signature_radio1.config(state=tk.NORMAL)
             self.signature_radio2.config(state=tk.NORMAL)
-            self.signature_input.config(state=tk.NORMAL)
+            self.signature_option_menu.config(state=tk.NORMAL)
         else:  # If the checkbox is unchecked
             self.signature_radio1.config(state=tk.DISABLED)
             self.signature_radio2.config(state=tk.DISABLED)
-            self.signature_input.config(state=tk.DISABLED)
+            self.signature_option_menu.config(state=tk.DISABLED)
 
     def receive_message_page(self):
         print("receive page")

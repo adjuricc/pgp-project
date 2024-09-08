@@ -1,3 +1,5 @@
+import base64
+
 import models
 import json
 import re
@@ -20,6 +22,7 @@ private_key_rings = []
 public_key_rings = []
 logged_user = None
 num_of_exports = []
+ivs = []
 def register_action(username, email, password, set_status):
     global logged_user
     print("Register button clicked")
@@ -63,6 +66,7 @@ def register_action(username, email, password, set_status):
             #adding user to private key rings
 
             private_key_rings.append(models.PrivateKeyRing(email))
+            ivs.append(models.Ivs(email))
 
             num_of_exports.append({"username": username, "num": 0})
 
@@ -90,6 +94,8 @@ def login_action(username, password, set_status):
 
 def generate_key_pair_action(key_size, set_status):
     global logged_user
+    global ivs
+
     print("Generate key pair button clicked")
     if logged_user is None:
         set_status("User must be logged in. ")
@@ -137,6 +143,11 @@ def generate_key_pair_action(key_size, set_status):
 
                 # Generisanje vektora inicijalizacije (IV)
                 iv = get_random_bytes(8)  # CAST-128 koristi 8-bajtni IV
+
+                for elem in ivs:
+                    if elem.user_id == logged_user.email:
+                        elem.add_value(iv)
+                        break
 
                 # Kreiranje CAST-128 objekta za šifrovanje
                 cipher = CAST.new(cast_key, CAST.MODE_CBC, iv)
@@ -187,12 +198,98 @@ def get_public_key_ring(set_status):
 
 def send_message_action(filename, filepath, encryption_var, signature_var, compress_var, radix64_var, encryption_option, signature_option, enc_input, signature_input, message, set_status):
     global logged_user
+    global ivs
+
+    public_key_id = None
+    signature = None
 
     if logged_user is None:
         set_status("User must be logged in. ")
     elif filename.get() is None and filepath.get() is None:
         set_status("Fields with * are mandatory. ")
     else:
+
+        # napravimo message koji se sastoji od filename, timestamp i data
+        msg = {
+            "filename": filename.get(),
+            "timestamp": time.time(),
+            "data": message.get("1.0", "end-1c")
+        }
+
+        # AUTENTIKACIJA
+        if signature_var.get():
+            # Kreiranje SHA-1 objekta
+            digest = hashes.Hash(hashes.SHA1())
+
+            # Dodavanje podataka koje želite da heširate
+            message_bytes = (json.dumps(msg)).encode('utf-8')
+            digest.update(message_bytes)
+
+            # Dobijanje heš vrednosti
+            hashed_message = digest.finalize()
+
+            #DEKRIPTOVANJE PRIVATNOG KLJUCA
+
+            key_index = int(signature_input.split(" ")[2])
+
+            # Kreiranje SHA-1 objekta
+            digest = hashes.Hash(hashes.SHA1())
+
+            # Dodavanje podataka koje želite da heširate
+            digest.update(logged_user.password)
+
+            # Dobijanje heš vrednosti
+            hash_value = digest.finalize()
+
+            cast_key = hash_value[:16]  # CAST-128 ključ mora biti između 5 i 16 bajtova
+
+            # Generisanje vektora inicijalizacije (IV)
+            iv = None
+
+            for elem in ivs:
+                if elem.user_id == logged_user.email:
+                    iv = elem.values[key_index]
+                    break
+
+            # Kreiranje CAST-128 objekta za šifrovanje
+            cipher = CAST.new(cast_key, CAST.MODE_CBC, iv)
+
+            private_key_input = None
+
+            for key in private_key_rings:
+                if key.user_id == logged_user.email:
+                    private_key_input = key.user_keys[key_index]["private_key"]
+                    break
+
+            decrypted_private_key_padded = cipher.decrypt(private_key_input)
+
+            # Korak 3: Uklanjanje padding-a
+            decrypted_private_key = unpad(decrypted_private_key_padded, CAST.block_size)
+
+            # Korak 4: Deserijalizacija privatnog ključa
+            private_key = serialization.load_pem_private_key(
+                decrypted_private_key,
+                password=None
+            )
+
+            signature = private_key.sign(
+                hashed_message,
+                padding.PKCS1v15(),
+                hashes.SHA1()
+            )
+
+            found = False
+
+            for ring in private_key_rings:
+                if ring.user_id == logged_user.email:
+                    for elem in ring.user_keys:
+                        if elem["private_key"] == private_key_input:
+                            public_key_id = elem["key_id"]
+                            found = True
+                            break
+                    if found:
+                        break
+
         if encryption_var.get():
             if enc_input.get() is None:
                 set_status("Please input user id for encryption. ")
@@ -213,52 +310,6 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
                             else:
                                 # ako ima generisemo random sesijski kljuc
                                 session_key = secrets.token_bytes(16)
-
-                                # napravimo message koji se sastoji od filename, timestamp i data
-                                msg = {
-                                    "filename": filename.get(),
-                                    "timestamp": time.time(),
-                                    "data": message.get("1.0", "end-1c")
-                                }
-
-                                # AUTENTIKACIJA
-                                if signature_var:
-                                    # Kreiranje SHA-1 objekta
-                                    digest = hashes.Hash(hashes.SHA1())
-
-                                    # Dodavanje podataka koje želite da heširate
-                                    message_bytes = (json.dumps(msg)).encode('utf-8')
-                                    digest.update(message_bytes)
-
-                                    # Dobijanje heš vrednosti
-                                    hashed_message = digest.finalize()
-
-                                    private_key = serialization.load_der_private_key(
-                                        signature_input,
-                                        password=None,
-                                        backend=default_backend()
-                                    )
-
-                                    signature = private_key.sign(
-                                        hashed_message,
-                                        padding.PKCS1v15(),
-                                        hashes.SHA1()
-                                    )
-
-                                    msg.sender_id = logged_user.email
-                                    msg.signature = signature
-                                    found = False
-
-                                    for ring in private_key_rings:
-                                        if ring.user_id == logged_user.email:
-                                            for elem in ring.user_keys:
-                                                if elem["private_key"] == signature_input:
-                                                    msg.public_key_id = elem["key_id"]
-                                                    found = True
-                                                    break
-
-                                            if found:
-                                                break
 
                                 # sesijskim kljucem kriptujemo poruku
 
@@ -306,11 +357,17 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
                                     print(file_path)
 
                                     with open(file_path, mode='wb') as file:
-                                            file.write("message".encode('utf-8'))
-                                            file.write(ciphertext)
-                                            file.write("session key component".encode('utf-8'))
-                                            file.write(recipient_key_id.to_bytes(8, byteorder='big'))
-                                            file.write(session_key_ciphertxt)
+                                        if signature is not None:
+                                            file.write("signature".encode('utf-8'))
+                                            file.write(signature)
+                                        if public_key_id is not None:
+                                            file.write("keyID".encode('utf-8'))
+                                            file.write(str(public_key_id).encode('utf-8'))
+                                        file.write("message".encode('utf-8'))
+                                        file.write(ciphertext)
+                                        file.write("session key component".encode('utf-8'))
+                                        file.write(recipient_key_id.to_bytes(8, byteorder='big'))
+                                        file.write(session_key_ciphertxt)
 
                                     print(f"Ciphertext Ks: {session_key_ciphertxt.hex()}")
 
@@ -375,6 +432,8 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
 
 
 
+
+
 def receive_msg_action(message):
     # AUTENTIKACIJA
 
@@ -407,10 +466,6 @@ def receive_msg_action(message):
         print("Potpis je validan. Poruka je autentična.")
     except Exception as e:
         print("Potpis nije validan. Poruka možda nije autentična ili je izmenjena.")
-
-
-
-
 
 
 def import_keys_action(filepath):

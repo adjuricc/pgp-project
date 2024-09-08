@@ -66,6 +66,14 @@ class PublicKeyRing:
             print("\n")
 
 
+class Ivs:
+    def __init__(self, user_id):
+        self.user_id = user_id
+        self.values = []
+
+    def add_value(self, value):
+        self.values.append(value)
+
 class Message:
     def __init__(self, timestamp, filename, message):
         self.timestamp = timestamp
