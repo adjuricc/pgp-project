@@ -13,6 +13,10 @@ from Crypto.Cipher import CAST
 from Crypto.Random import get_random_bytes
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Cipher import DES3
+from Crypto.Cipher import AES
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
+import os
 
 import secrets
 from cryptography.hazmat.backends import default_backend
@@ -294,10 +298,20 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
             if enc_input.get() is None:
                 set_status("Please input user id for encryption. ")
             else:
-                user_id = enc_input.get()
-                email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+                # nadji user_id preko public key
+                public_key_input = enc_input.get()
 
-                if not re.match(email_pattern, user_id):
+                user_id = None
+
+                print(private_key_rings)
+
+                for private_key_ring in private_key_rings:
+                    for key in private_key_ring.user_keys:
+                        if key["key_id"] == int(public_key_input):
+                            user_id = private_key_ring.get_user_id()
+                            break
+
+                if user_id is None:
                     set_status("Invalid format for user id. ")
                 else:
                     for user in users:
@@ -311,55 +325,40 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
                                 # ako ima generisemo random sesijski kljuc
                                 session_key = secrets.token_bytes(16)
 
+                                # sesijski kljuc kriptujemo pomocu rsa koristeci javni kljuc od primaoca, dodamo kljuc poruci
+                                session_key_ciphertxt = user.my_keys[0]["public_key"].encrypt(
+                                    session_key,
+                                    padding.OAEP(
+                                        mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                                        algorithm=hashes.SHA256(),
+                                        label=None
+                                    )
+                                )
+
+                                recipient_public_key_bytes = user.my_keys[0]["public_key"].public_bytes(
+                                    encoding=serialization.Encoding.DER,
+                                    format=serialization.PublicFormat.SubjectPublicKeyInfo
+                                )
+                                recipient_public_key_int = int.from_bytes(recipient_public_key_bytes, byteorder='big')
+
+                                recipient_key_id = recipient_public_key_int & ((1 << 64) - 1)
+
+                                message_bytes = (json.dumps(msg)).encode('utf-8')
+
                                 # triple des alg
                                 if encryption_option.get() == 1:
                                     print("TripleDES")
-
-                                    print(msg["filename"], msg["timestamp"], msg["data"])
-
-                                    message_bytes = (json.dumps(msg)).encode('utf-8')
 
                                     cipher = DES3.new(session_key, DES3.MODE_CBC)
 
                                     iv = cipher.iv  # Initialization Vector (IV)
                                     ciphertext = cipher.encrypt(pad(message_bytes, DES3.block_size))
 
-                                    print(f'Ciphertext: {ciphertext.hex()}')
-
-                                    print("SESSION KEY")
-                                    print(session_key)
-
-                                    # sesijski kljuc kriptujemo pomocu rsa koristeci javni kljuc od primaoca, dodamo kljuc poruci
-                                    session_key_ciphertxt = user.my_keys[0]["public_key"].encrypt(
-                                        session_key,
-                                        padding.OAEP(
-                                            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                                            algorithm=hashes.SHA256(),
-                                            label=None
-                                        )
-                                    )
-
-                                    print("encrypted SESSION KEY")
-                                    print(session_key_ciphertxt)
-
-                                    recipient_public_key_bytes = user.my_keys[0]["public_key"].public_bytes(
-                                        encoding=serialization.Encoding.DER,
-                                        format=serialization.PublicFormat.SubjectPublicKeyInfo
-                                    )
-                                    recipient_public_key_int = int.from_bytes(recipient_public_key_bytes, byteorder='big')
-
-                                    recipient_key_id = recipient_public_key_int & ((1 << 64) - 1)
-
-                                    print("send msg recipient key id")
-                                    print(recipient_key_id)
-                                    print(str(recipient_key_id).encode('utf-8'))
 
                                     current_directory = os.path.dirname(os.path.abspath(__file__))
                                     user_directory = os.path.join(current_directory, user.username)
                                     export_directory = os.path.join(user_directory, "receive")
                                     file_path = os.path.join(export_directory, filename.get())
-
-                                    print(file_path)
 
                                     with open(file_path, mode='wb') as file:
                                         if signature is not None: # nece uci ako enc nije cekirano
@@ -372,64 +371,117 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
                                             file.write(b"\n")
                                             file.write(str(public_key_id).encode('utf-8'))
                                             file.write(b"\n")
+
                                         file.write("message".encode('utf-8'))
                                         file.write(b"\n")
-
                                         encoded_ciphertext = base64.b64encode(ciphertext)
                                         file.write(encoded_ciphertext)
-                                        # file.write(ciphertext)
                                         file.write(b"\n")
+
+                                        file.write("encryption algorithm".encode('utf-8'))
+                                        file.write(b"\n")
+                                        file.write("TripleDES".encode('utf-8'))
+                                        file.write(b"\n")
+
                                         file.write("session key component".encode('utf-8'))
                                         file.write(b"\n")
                                         encoded_session_key = base64.b64encode(session_key_ciphertxt)
                                         file.write(encoded_session_key)
-                                        # file.write(session_key_ciphertxt)
                                         file.write(b"\n")
+
                                         file.write("recipient key id".encode('utf-8'))
                                         file.write(b"\n")
                                         file.write(str(recipient_key_id).encode('utf-8'))
-                                        # file.write(recipient_key_id.to_bytes(8, byteorder='big'))
                                         file.write(b"\n")
 
-                                    print(f"Ciphertext Ks: {session_key_ciphertxt.hex()}")
 
-                                    found = False
+                                elif encryption_option.get() == 2:
+                                    print("AES128")
 
-                                    # treba da dodamo nas javni kljuc u njihov public key ring
-                                    for public_key_ring in public_key_rings:
-                                        if public_key_ring.user == user.email:
-                                            public_key_bytes = logged_user.my_keys[0]["public_key"].public_bytes(
-                                                encoding=serialization.Encoding.DER,
-                                                format=serialization.PublicFormat.SubjectPublicKeyInfo
-                                            )
-                                            public_key_int = int.from_bytes(public_key_bytes, byteorder='big')
+                                    cipher = AES.new(session_key, AES.MODE_ECB)
 
-                                            key_id = public_key_int & ((1 << 64) - 1)
+                                    padded_plaintext = pad(message_bytes, AES.block_size)
+                                    ciphertext = cipher.encrypt(padded_plaintext)
 
-                                            public_key_ring.add_key(logged_user.email, time.time(), key_id, logged_user.my_keys[0]["public_key"])
+                                    print(f'Ciphertext: {ciphertext.hex()}')
 
-                                            found = True
 
-                                            break
+                                    current_directory = os.path.dirname(os.path.abspath(__file__))
+                                    user_directory = os.path.join(current_directory, user.username)
+                                    export_directory = os.path.join(user_directory, "receive")
+                                    file_path = os.path.join(export_directory, filename.get())
 
-                                    if not found:
+                                    with open(file_path, mode='wb') as file:
+                                        if signature is not None: # nece uci ako enc nije cekirano
+                                            file.write("signature".encode('utf-8'))
+                                            file.write(b"\n")
+                                            file.write(signature)
+                                            file.write(b"\n")
+                                        if public_key_id is not None:
+                                            file.write("keyID".encode('utf-8'))
+                                            file.write(b"\n")
+                                            file.write(str(public_key_id).encode('utf-8'))
+                                            file.write(b"\n")
+
+                                        file.write("message".encode('utf-8'))
+                                        file.write(b"\n")
+                                        encoded_ciphertext = base64.b64encode(ciphertext)
+                                        file.write(encoded_ciphertext)
+                                        file.write(b"\n")
+
+                                        file.write("encryption algorithm".encode('utf-8'))
+                                        file.write(b"\n")
+                                        file.write("AES128".encode('utf-8'))
+                                        file.write(b"\n")
+
+                                        file.write("session key component".encode('utf-8'))
+                                        file.write(b"\n")
+                                        encoded_session_key = base64.b64encode(session_key_ciphertxt)
+                                        file.write(encoded_session_key)
+                                        file.write(b"\n")
+
+                                        file.write("recipient key id".encode('utf-8'))
+                                        file.write(b"\n")
+                                        file.write(str(recipient_key_id).encode('utf-8'))
+                                        file.write(b"\n")
+
+
+                                found = False
+
+                                # treba da dodamo nas javni kljuc u njihov public key ring
+                                for public_key_ring in public_key_rings:
+                                    if public_key_ring.user == user.email:
                                         public_key_bytes = logged_user.my_keys[0]["public_key"].public_bytes(
                                             encoding=serialization.Encoding.DER,
                                             format=serialization.PublicFormat.SubjectPublicKeyInfo
                                         )
-
                                         public_key_int = int.from_bytes(public_key_bytes, byteorder='big')
 
                                         key_id = public_key_int & ((1 << 64) - 1)
 
-                                        public_key_ring = models.PublicKeyRing(user_id)
-                                        public_key_ring.add_key(logged_user.email, time.time(), key_id, logged_user.my_keys[0]["public_key"])
-                                        public_key_rings.append(public_key_ring)
+                                        public_key_ring.add_key(logged_user.email, time.time(), key_id,
+                                                                logged_user.my_keys[0]["public_key"])
 
-                                    print(public_key_rings)
+                                        found = True
 
-                                elif encryption_option.get() == 2:
-                                    print("CAST5")
+                                        break
+
+                                if not found:
+                                    public_key_bytes = logged_user.my_keys[0]["public_key"].public_bytes(
+                                        encoding=serialization.Encoding.DER,
+                                        format=serialization.PublicFormat.SubjectPublicKeyInfo
+                                    )
+
+                                    public_key_int = int.from_bytes(public_key_bytes, byteorder='big')
+
+                                    key_id = public_key_int & ((1 << 64) - 1)
+
+                                    public_key_ring = models.PublicKeyRing(user_id)
+                                    public_key_ring.add_key(logged_user.email, time.time(), key_id,
+                                                            logged_user.my_keys[0]["public_key"])
+                                    public_key_rings.append(public_key_ring)
+
+                                print(public_key_rings)
 
                             break
                         else:
@@ -483,6 +535,7 @@ def receive_msg_action(message):
     enc_message = None
     enc_session_key = None
     recipient_key_id = None
+    alg = None
 
     with open(file_path, mode='rb') as file:
         lines = file.readlines()
@@ -499,6 +552,9 @@ def receive_msg_action(message):
                 key_id_str = recipient_key_id.decode('utf-8')
 
                 key_id_int = int(key_id_str)
+
+            if b"encryption algorithm" in line:
+                alg = lines[i + 1].strip().decode('utf-8')
 
 
         if enc_message:
@@ -533,13 +589,19 @@ def receive_msg_action(message):
                 )
             )
 
+            if alg == "TripleDES":
+                cipher = DES3.new(session_key_plaintext, DES3.MODE_CBC)
+                iv = cipher.iv
+                cipher_decrypt = DES3.new(session_key_plaintext, DES3.MODE_CBC, iv=iv)
+                plaintext = unpad(cipher_decrypt.decrypt(enc_message), DES3.block_size)
 
-            cipher = DES3.new(session_key_plaintext, DES3.MODE_CBC)
-            iv = cipher.iv
-            cipher_decrypt = DES3.new(session_key_plaintext, DES3.MODE_CBC, iv=iv)
-            plaintext = unpad(cipher_decrypt.decrypt(enc_message), DES3.block_size)
+                print(plaintext)
+            elif alg == "AES128":
+                decipher = AES.new(session_key_plaintext, AES.MODE_ECB)
+                decrypted_padded_plaintext = decipher.decrypt(enc_message)
+                decrypted_plaintext = unpad(decrypted_padded_plaintext, AES.block_size)
 
-            print(plaintext)
+                print(f'Decrypted Plaintext: {decrypted_plaintext.decode()}')
         else:
             print("No session key component found.")
 

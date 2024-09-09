@@ -1,0 +1,8 @@
+message
+HD4niPEx3MiAwRxdcGajcflUieO/hAuhhTcEa3OQUYXr+e9BkAWOFKICdGN+feWnOjzZwFrKbjuV94l9mY7LqaAW+PQzaCt4GMq1Bp/CLmVDd+94woJF7w==
+encryption algorithm
+TripleDES
+session key component
+PlRj0n0qTskRO+37rbD+COrLbwm8scR+LSXWhLEDqRNATCQuYc6UiKzGWCm0cAE/j7rbUl0vldOylz2Bv0Jb06wZ2mghpyuYPLpHSwp9obu/6xbB6ExDMEenuqlriRsFErjNzgirAjDurhbyMJAPQp1+7cZyKyeLl+5/2DzjeZQ=
+recipient key id
+5296245265055940609

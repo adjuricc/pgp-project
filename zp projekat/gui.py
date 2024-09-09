@@ -313,7 +313,7 @@ class AppGUI:
 
         self.encryption_option = tk.IntVar()
         self.enc_radio1 = tk.Radiobutton(self.main, text="TripleDES", variable=self.encryption_option, value=1, state=tk.DISABLED)
-        self.enc_radio2 = tk.Radiobutton(self.main, text="CAST5", variable=self.encryption_option, value=2, state=tk.DISABLED)
+        self.enc_radio2 = tk.Radiobutton(self.main, text="AES128", variable=self.encryption_option, value=2, state=tk.DISABLED)
         self.enc_radio1.grid(row=5, column=2, padx=5, pady=5, sticky=tk.W)
         self.enc_radio2.grid(row=5, column=3, padx=5, pady=5, sticky=tk.W)
         self.enc_label = tk.Label(self.main, text="Public key:")
