@@ -1,4 +1,5 @@
 import base64
+import zlib
 
 import models
 import json
@@ -70,6 +71,8 @@ def register_action(username, email, password, set_status):
             #adding user to private key rings
 
             private_key_rings.append(models.PrivateKeyRing(email))
+            public_key_rings.append(models.PublicKeyRing(email))
+
             ivs.append(models.Ivs(email))
 
             num_of_exports.append({"username": username, "num": 0})
@@ -120,20 +123,27 @@ def generate_key_pair_action(key_size, set_status):
             format=serialization.PublicFormat.SubjectPublicKeyInfo
         )
 
+        # Serijalizacija javnog ključa u PEM ili DER format (izaberite DER za bajtove)
+        public_key_bytes = public_key.public_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+
+        # Kreiranje key id
+        # Konvertovanje bajtova u integer (bajtova niz u broj)
+        public_key_int = int.from_bytes(public_key_bytes, byteorder='big')
+        # Izdvajanje poslednjih 64 bita
+        key_id = public_key_int & ((1 << 64) - 1)
+
+        # Dodavanje javnog kljuca u prsten javnih kljuceva
+
+        for key in public_key_rings:
+            if key.user_id == logged_user.email:
+                key.add_key(logged_user.email, time.time(), key_id, public_key)
+                break
+
         for key in private_key_rings:
             if key.user_id == logged_user.email:
-                # Serijalizacija javnog ključa u PEM ili DER format (izaberite DER za bajtove)
-                public_key_bytes = public_key.public_bytes(
-                    encoding=serialization.Encoding.DER,
-                    format=serialization.PublicFormat.SubjectPublicKeyInfo
-                )
-
-                # Kreiranje key id
-                # Konvertovanje bajtova u integer (bajtova niz u broj)
-                public_key_int = int.from_bytes(public_key_bytes, byteorder='big')
-                # Izdvajanje poslednjih 64 bita
-                key_id = public_key_int & ((1 << 64) - 1)
-
                 # Kreiranje SHA-1 objekta
                 digest = hashes.Hash(hashes.SHA1())
 
@@ -185,22 +195,26 @@ def get_private_key_ring(set_status):
 
     else:
         for private_key_ring in private_key_rings:
-            if private_key_ring.get_user_id() == logged_user.get_email():
+            if private_key_ring.user_id == logged_user.email:
                 return private_key_ring
     return None
 
 def get_public_key_ring(set_status):
     global logged_user
 
+    keys = []
+
     if logged_user is None:
         set_status("User must be logged in. ")
     else:
         for public_key_ring in public_key_rings:
-            if public_key_ring.user == logged_user.email:
-                return public_key_ring
+            for key in public_key_ring.keys:
+                keys.append(key)
+
+        return keys
     return None
 
-def send_message_action(filename, filepath, encryption_var, signature_var, compress_var, radix64_var, encryption_option, signature_option, enc_input, signature_input, message, set_status):
+def send_message_action(filename, encryption_var, signature_var, compress_var, radix64_var, encryption_option, signature_option, enc_input, signature_input, message, set_status):
     global logged_user
     global ivs
 
@@ -209,7 +223,7 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
 
     if logged_user is None:
         set_status("User must be logged in. ")
-    elif filename.get() is None and filepath.get() is None:
+    elif filename.get() is None:
         set_status("Fields with * are mandatory. ")
     else:
 
@@ -294,6 +308,14 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
                     if found:
                         break
 
+        message_bytes = (json.dumps(msg)).encode('utf-8')
+
+        if compress_var.get():
+            message_bytes = zlib.compress(message_bytes)
+
+        if radix64_var.get():
+            message_bytes = base64.b64encode(message_bytes)
+
         if encryption_var.get():
             if enc_input.get() is None:
                 set_status("Please input user id for encryption. ")
@@ -343,7 +365,12 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
 
                                 recipient_key_id = recipient_public_key_int & ((1 << 64) - 1)
 
-                                message_bytes = (json.dumps(msg)).encode('utf-8')
+                                #message_bytes = (json.dumps(msg)).encode('utf-8')
+
+                                current_directory = os.path.dirname(os.path.abspath(__file__))
+                                user_directory = os.path.join(current_directory, user.username)
+                                export_directory = os.path.join(user_directory, "receive")
+                                file_path = os.path.join(export_directory, filename.get())
 
                                 # triple des alg
                                 if encryption_option.get() == 1:
@@ -353,48 +380,6 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
 
                                     iv = cipher.iv  # Initialization Vector (IV)
                                     ciphertext = cipher.encrypt(pad(message_bytes, DES3.block_size))
-
-
-                                    current_directory = os.path.dirname(os.path.abspath(__file__))
-                                    user_directory = os.path.join(current_directory, user.username)
-                                    export_directory = os.path.join(user_directory, "receive")
-                                    file_path = os.path.join(export_directory, filename.get())
-
-                                    with open(file_path, mode='wb') as file:
-                                        if signature is not None: # nece uci ako enc nije cekirano
-                                            file.write("signature".encode('utf-8'))
-                                            file.write(b"\n")
-                                            file.write(signature)
-                                            file.write(b"\n")
-                                        if public_key_id is not None:
-                                            file.write("keyID".encode('utf-8'))
-                                            file.write(b"\n")
-                                            file.write(str(public_key_id).encode('utf-8'))
-                                            file.write(b"\n")
-
-                                        file.write("message".encode('utf-8'))
-                                        file.write(b"\n")
-                                        encoded_ciphertext = base64.b64encode(ciphertext)
-                                        file.write(encoded_ciphertext)
-                                        file.write(b"\n")
-
-                                        file.write("encryption algorithm".encode('utf-8'))
-                                        file.write(b"\n")
-                                        file.write("TripleDES".encode('utf-8'))
-                                        file.write(b"\n")
-
-                                        file.write("session key component".encode('utf-8'))
-                                        file.write(b"\n")
-                                        encoded_session_key = base64.b64encode(session_key_ciphertxt)
-                                        file.write(encoded_session_key)
-                                        file.write(b"\n")
-
-                                        file.write("recipient key id".encode('utf-8'))
-                                        file.write(b"\n")
-                                        file.write(str(recipient_key_id).encode('utf-8'))
-                                        file.write(b"\n")
-
-
                                 elif encryption_option.get() == 2:
                                     print("AES128")
 
@@ -411,81 +396,49 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
                                     export_directory = os.path.join(user_directory, "receive")
                                     file_path = os.path.join(export_directory, filename.get())
 
-                                    with open(file_path, mode='wb') as file:
-                                        if signature is not None: # nece uci ako enc nije cekirano
-                                            file.write("signature".encode('utf-8'))
-                                            file.write(b"\n")
-                                            file.write(signature)
-                                            file.write(b"\n")
-                                        if public_key_id is not None:
-                                            file.write("keyID".encode('utf-8'))
-                                            file.write(b"\n")
-                                            file.write(str(public_key_id).encode('utf-8'))
-                                            file.write(b"\n")
-
-                                        file.write("message".encode('utf-8'))
+                                with open(file_path, mode='wb') as file:
+                                    if signature is not None: # nece uci ako enc nije cekirano
+                                        file.write("signature".encode('utf-8'))
                                         file.write(b"\n")
-                                        encoded_ciphertext = base64.b64encode(ciphertext)
-                                        file.write(encoded_ciphertext)
+                                        file.write(signature)
+                                        file.write(b"\n")
+                                    if public_key_id is not None:
+                                        file.write("keyID".encode('utf-8'))
+                                        file.write(b"\n")
+                                        file.write(str(public_key_id).encode('utf-8'))
                                         file.write(b"\n")
 
-                                        file.write("encryption algorithm".encode('utf-8'))
+                                    file.write("message".encode('utf-8'))
+                                    file.write(b"\n")
+                                    if encryption_option.get() == 1 or encryption_option.get() == 2:
+                                        #encoded_ciphertext = base64.b64encode(ciphertext)
+                                        file.write(ciphertext)
+                                    else:
+                                        file.write(message_bytes)
+
+                                    file.write(b"\n")
+
+                                    file.write("encryption algorithm".encode('utf-8'))
+                                    file.write(b"\n")
+
+                                    if encryption_option.get() == 1:
+                                        file.write("TripleDES".encode('utf-8'))
                                         file.write(b"\n")
+                                    elif encryption_option.get() == 2:
                                         file.write("AES128".encode('utf-8'))
                                         file.write(b"\n")
 
-                                        file.write("session key component".encode('utf-8'))
-                                        file.write(b"\n")
-                                        encoded_session_key = base64.b64encode(session_key_ciphertxt)
-                                        file.write(encoded_session_key)
-                                        file.write(b"\n")
+                                    file.write("session key component".encode('utf-8'))
+                                    file.write(b"\n")
+                                    encoded_session_key = base64.b64encode(session_key_ciphertxt)
+                                    file.write(encoded_session_key)
+                                    file.write(b"\n")
 
-                                        file.write("recipient key id".encode('utf-8'))
-                                        file.write(b"\n")
-                                        file.write(str(recipient_key_id).encode('utf-8'))
-                                        file.write(b"\n")
+                                    file.write("recipient key id".encode('utf-8'))
+                                    file.write(b"\n")
+                                    file.write(str(recipient_key_id).encode('utf-8'))
+                                    file.write(b"\n")
 
-
-                                found = False
-
-                                # treba da dodamo nas javni kljuc u njihov public key ring
-                                for public_key_ring in public_key_rings:
-                                    if public_key_ring.user == user.email:
-                                        public_key_bytes = logged_user.my_keys[0]["public_key"].public_bytes(
-                                            encoding=serialization.Encoding.DER,
-                                            format=serialization.PublicFormat.SubjectPublicKeyInfo
-                                        )
-                                        public_key_int = int.from_bytes(public_key_bytes, byteorder='big')
-
-                                        key_id = public_key_int & ((1 << 64) - 1)
-
-                                        public_key_ring.add_key(logged_user.email, time.time(), key_id,
-                                                                logged_user.my_keys[0]["public_key"])
-
-                                        found = True
-
-                                        break
-
-                                if not found:
-                                    public_key_bytes = logged_user.my_keys[0]["public_key"].public_bytes(
-                                        encoding=serialization.Encoding.DER,
-                                        format=serialization.PublicFormat.SubjectPublicKeyInfo
-                                    )
-
-                                    public_key_int = int.from_bytes(public_key_bytes, byteorder='big')
-
-                                    key_id = public_key_int & ((1 << 64) - 1)
-
-                                    public_key_ring = models.PublicKeyRing(user_id)
-                                    public_key_ring.add_key(logged_user.email, time.time(), key_id,
-                                                            logged_user.my_keys[0]["public_key"])
-                                    public_key_rings.append(public_key_ring)
-
-                                print(public_key_rings)
-
-                            break
-                        else:
-                            set_status("User not found. ")
 
 def private_key_decrypt(enc_private_key, index):
     global logged_user
@@ -555,7 +508,6 @@ def receive_msg_action(message):
 
             if b"encryption algorithm" in line:
                 alg = lines[i + 1].strip().decode('utf-8')
-
 
         if enc_message:
             print(f"Message (ciphertext): {enc_message}")
@@ -714,8 +666,6 @@ def export_keys_action(username, public_key, private_key, option):
                 file.write(public_pem)
 
             break
-
-
 
 
 def log_out_action():

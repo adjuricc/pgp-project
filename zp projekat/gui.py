@@ -214,8 +214,15 @@ class AppGUI:
     def set_public_keys_action(self, callback):
         self.public_keys_action_callback = callback
 
+
     def keys_page(self):
         self.clear_main()
+
+        def on_tree_click(event):
+            selected_item = tree2.selection()[0]  # Izabran red (ID u Treeview-u)
+            key_id = tree2.item(selected_item)['values'][2]  # 'values' sadrži sve kolone, [2] je key id
+            self.main.clipboard_clear()  # Očisti clipboard
+            self.main.clipboard_append(key_id)  # Kopiraj key id u clipboard
 
         public_key_ring = None
 
@@ -223,8 +230,8 @@ class AppGUI:
             private_key_ring = self.keys_action_callback()
             public_key_ring = self.public_keys_action_callback()
 
-            if public_key_ring is not None:
-                public_key_ring.print_ring()
+            # if public_key_ring is not None:
+            #     public_key_ring.print_ring()
 
         columns = ('#1', '#2', '#3', '#4', '#5')
 
@@ -254,6 +261,8 @@ class AppGUI:
                     row.append(i)
                 tree.insert('', tk.END, values=row)
 
+
+
         # Pack the Treeview widget (table)
         tree.pack(pady=20)
 
@@ -275,8 +284,16 @@ class AppGUI:
         tree2.column('#4', width=100, anchor=tk.CENTER)
 
         if public_key_ring is not None:
-            for item in public_key_ring.get_user_keys():
-                tree2.insert('', tk.END, values=item)
+            for item in public_key_ring:
+                if item["user_id"] != logic.logged_user.email:
+                    row = []
+                    row.append(item["user_id"])
+                    row.append(item["timestamp"])
+                    row.append(item["key_id"])
+                    row.append(item["public_key"])
+                    tree2.insert('', tk.END, values=row)
+
+        tree2.bind("<ButtonRelease-1>", on_tree_click)
 
         # Pack the Treeview widget (table)
         tree2.pack(pady=20)
@@ -286,7 +303,7 @@ class AppGUI:
 
     def handle_send_message(self):
         if self.send_message_callback:
-            self.send_message_callback(self.filename_input, self.filepath_input, self.encryption_var, self.signature_var, self.compress_var, self.radix64_var, self.encryption_option, self.signature_option, self.enc_input, self.signature_option_var.get(), self.message)
+            self.send_message_callback(self.filename_input, self.encryption_var, self.signature_var, self.compress_var, self.radix64_var, self.encryption_option, self.signature_option, self.enc_input, self.signature_option_var.get(), self.message)
 
     def send_message_page(self):
         self.clear_main()
@@ -296,14 +313,8 @@ class AppGUI:
         self.filename_input = tk.Entry(self.main)
         self.filename_input.grid(row=1, column=1, padx=5, pady=15, sticky=tk.W)
 
-        self.filepath_label = tk.Label(self.main, text="* Filepath:")
-        self.filepath_label.grid(row=2, column=0, padx=5, pady=15, sticky=tk.E)
-        self.filepath_input = tk.Entry(self.main)
-        self.filepath_input.grid(row=2, column=1, padx=5, pady=15, sticky=tk.W)
-
-
         self.options_label = tk.Label(self.main, text="Options:")
-        self.options_label.grid(row=3, column=0, padx=5, pady=15, sticky=tk.E)
+        self.options_label.grid(row=2, column=0, padx=5, pady=15, sticky=tk.E)
 
         self.encryption_var = tk.BooleanVar()
         self.signature_var = tk.BooleanVar()
@@ -326,9 +337,7 @@ class AppGUI:
 
         self.signature_option = tk.IntVar()
         self.signature_radio1 = tk.Radiobutton(self.main, text="RSA", variable=self.signature_option, value=1, state=tk.DISABLED)
-        self.signature_radio2 = tk.Radiobutton(self.main, text="DSA", variable=self.signature_option, value=2, state=tk.DISABLED)
         self.signature_radio1.grid(row=8, column=2, padx=5, pady=5, sticky=tk.W)
-        self.signature_radio2.grid(row=8, column=3, padx=5, pady=5, sticky=tk.W)
         self.signature_label = tk.Label(self.main, text="Private key:")
         self.signature_label.grid(row=9, column=2, padx=5, pady=15, sticky=tk.E)
         # self.signature_input = tk.Entry(self.main, state=tk.DISABLED)
@@ -376,11 +385,9 @@ class AppGUI:
     def toggle_signature_radio_buttons(self):
         if self.signature_var.get():  # If the checkbox is checked
             self.signature_radio1.config(state=tk.NORMAL)
-            self.signature_radio2.config(state=tk.NORMAL)
             self.signature_option_menu.config(state=tk.NORMAL)
         else:  # If the checkbox is unchecked
             self.signature_radio1.config(state=tk.DISABLED)
-            self.signature_radio2.config(state=tk.DISABLED)
             self.signature_option_menu.config(state=tk.DISABLED)
 
     def set_receive_message_action(self, callback):

@@ -1,5 +1,6 @@
 import bcrypt
 
+
 class User:
     def __init__(self, username, email, password):
         self.username = username
@@ -46,7 +47,7 @@ class PrivateKeyRing:
 
 class PublicKeyRing:
     def __init__(self, user_id):
-        self.user = user_id
+        self.user_id = user_id
         self.keys = []
 
     def add_key(self, user_id, timestamp, key_id, public_key):
@@ -73,6 +74,7 @@ class Ivs:
 
     def add_value(self, value):
         self.values.append(value)
+
 
 class Message:
     def __init__(self, timestamp, filename, message):

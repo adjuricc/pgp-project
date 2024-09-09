@@ -22,8 +22,8 @@ def on_keys_action():
 def on_public_keys_action():
     return logic.get_public_key_ring(set_status)
 
-def on_send_message_action(filename, filepath, encryption_var, signature_var, compress_var, radix64_var, encryption_option, signature_option, enc_input, signature_input, message):
-    return logic.send_message_action(filename, filepath, encryption_var, signature_var, compress_var, radix64_var, encryption_option, signature_option, enc_input, signature_input, message, set_status)
+def on_send_message_action(filename, encryption_var, signature_var, compress_var, radix64_var, encryption_option, signature_option, enc_input, signature_input, message):
+    return logic.send_message_action(filename, encryption_var, signature_var, compress_var, radix64_var, encryption_option, signature_option, enc_input, signature_input, message, set_status)
 
 def on_export_action(username, public_key, private_key, option):
     return logic.export_keys_action(username, public_key, private_key, option)
