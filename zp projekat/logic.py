@@ -311,8 +311,7 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
                                 # ako ima generisemo random sesijski kljuc
                                 session_key = secrets.token_bytes(16)
 
-                                # sesijskim kljucem kriptujemo poruku
-
+                                # triple des alg
                                 if encryption_option.get() == 1:
                                     print("TripleDES")
 
@@ -322,12 +321,12 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
 
                                     cipher = DES3.new(session_key, DES3.MODE_CBC)
 
-                                    # Encrypt the data
                                     iv = cipher.iv  # Initialization Vector (IV)
                                     ciphertext = cipher.encrypt(pad(message_bytes, DES3.block_size))
 
                                     print(f'Ciphertext: {ciphertext.hex()}')
 
+                                    print("SESSION KEY")
                                     print(session_key)
 
                                     # sesijski kljuc kriptujemo pomocu rsa koristeci javni kljuc od primaoca, dodamo kljuc poruci
@@ -340,6 +339,9 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
                                         )
                                     )
 
+                                    print("encrypted SESSION KEY")
+                                    print(session_key_ciphertxt)
+
                                     recipient_public_key_bytes = user.my_keys[0]["public_key"].public_bytes(
                                         encoding=serialization.Encoding.DER,
                                         format=serialization.PublicFormat.SubjectPublicKeyInfo
@@ -348,6 +350,9 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
 
                                     recipient_key_id = recipient_public_key_int & ((1 << 64) - 1)
 
+                                    print("send msg recipient key id")
+                                    print(recipient_key_id)
+                                    print(str(recipient_key_id).encode('utf-8'))
 
                                     current_directory = os.path.dirname(os.path.abspath(__file__))
                                     user_directory = os.path.join(current_directory, user.username)
@@ -357,17 +362,34 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
                                     print(file_path)
 
                                     with open(file_path, mode='wb') as file:
-                                        if signature is not None:
+                                        if signature is not None: # nece uci ako enc nije cekirano
                                             file.write("signature".encode('utf-8'))
+                                            file.write(b"\n")
                                             file.write(signature)
+                                            file.write(b"\n")
                                         if public_key_id is not None:
                                             file.write("keyID".encode('utf-8'))
+                                            file.write(b"\n")
                                             file.write(str(public_key_id).encode('utf-8'))
+                                            file.write(b"\n")
                                         file.write("message".encode('utf-8'))
-                                        file.write(ciphertext)
+                                        file.write(b"\n")
+
+                                        encoded_ciphertext = base64.b64encode(ciphertext)
+                                        file.write(encoded_ciphertext)
+                                        # file.write(ciphertext)
+                                        file.write(b"\n")
                                         file.write("session key component".encode('utf-8'))
-                                        file.write(recipient_key_id.to_bytes(8, byteorder='big'))
-                                        file.write(session_key_ciphertxt)
+                                        file.write(b"\n")
+                                        encoded_session_key = base64.b64encode(session_key_ciphertxt)
+                                        file.write(encoded_session_key)
+                                        # file.write(session_key_ciphertxt)
+                                        file.write(b"\n")
+                                        file.write("recipient key id".encode('utf-8'))
+                                        file.write(b"\n")
+                                        file.write(str(recipient_key_id).encode('utf-8'))
+                                        # file.write(recipient_key_id.to_bytes(8, byteorder='big'))
+                                        file.write(b"\n")
 
                                     print(f"Ciphertext Ks: {session_key_ciphertxt.hex()}")
 
@@ -405,24 +427,7 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
                                         public_key_rings.append(public_key_ring)
 
                                     print(public_key_rings)
-                                    # DEKRIPCIJA
 
-                                    # session_key_plaintext = user.my_keys[0]["private_key"].decrypt(
-                                    #     ciphertext,
-                                    #     padding.OAEP(
-                                    #         mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                                    #         algorithm=hashes.SHA256(),
-                                    #         label=None
-                                    #     )
-                                    # )
-                                    #
-                                    # print(f"Decrypted message: {session_key_plaintext.decode()}")
-
-                                    # Decrypt the data
-                                    cipher_decrypt = DES3.new(session_key, DES3.MODE_CBC, iv=iv)
-                                    plaintext = unpad(cipher_decrypt.decrypt(ciphertext), DES3.block_size)
-
-                                    print(f'Plaintext: {plaintext.decode()}')
                                 elif encryption_option.get() == 2:
                                     print("CAST5")
 
@@ -430,42 +435,146 @@ def send_message_action(filename, filepath, encryption_var, signature_var, compr
                         else:
                             set_status("User not found. ")
 
+def private_key_decrypt(enc_private_key, index):
+    global logged_user
+    global ivs
+
+    digest = hashes.Hash(hashes.SHA1())
+    digest.update(logged_user.password)
+    hash_value = digest.finalize()
+    cast_key = hash_value[:16]  # CAST-128 key must be between 5 and 16 bytes
+
+    iv = None
+
+    for elem in ivs:
+        if elem.user_id == logged_user.email:
+            iv = elem.values[index]
+            break
 
 
+    # Step 2: Create the CAST-128 cipher with the IV
+    cipher = CAST.new(cast_key, CAST.MODE_CBC, iv)
+
+    # Step 3: Decrypt the private key
+    decrypted_private_key_padded = cipher.decrypt(enc_private_key)
+
+    # Step 4: Unpad the decrypted private key data
+    decrypted_private_key = unpad(decrypted_private_key_padded, CAST.block_size)
+
+    # Step 5: Deserialize the decrypted private key back into a private key object
+    private_key = serialization.load_pem_private_key(
+        decrypted_private_key,
+        password=None,  # Since there's no password on the PEM-encoded key
+    )
+
+    return private_key
 
 
 def receive_msg_action(message):
+    # kad korisnik prima poruku
+    global logged_user
+    current_directory = os.path.dirname(os.path.abspath(__file__))
+    user_directory = os.path.join(current_directory, logged_user.username)
+    export_directory = os.path.join(user_directory, "receive")
+    file_path = os.path.join(export_directory, "to_a1.txt") # ne sme da bude hardkodovano!!
+
+    # provera da li je odradjena tajnost
+
+    enc_message = None
+    enc_session_key = None
+    recipient_key_id = None
+
+    with open(file_path, mode='rb') as file:
+        lines = file.readlines()
+
+        for i, line in enumerate(lines):
+            if b"message" in line:
+                enc_message = base64.b64decode(lines[i + 1].strip())
+
+            if b"session key component" in line:
+                enc_session_key = base64.b64decode(lines[i + 1].strip())
+
+            if b"recipient key id" in line:
+                recipient_key_id = lines[i + 1].strip()
+                key_id_str = recipient_key_id.decode('utf-8')
+
+                key_id_int = int(key_id_str)
+
+
+        if enc_message:
+            print(f"Message (ciphertext): {enc_message}")
+        else:
+            print("No message found.")
+
+        if enc_session_key:
+            enc_private_key = None
+            index = -1
+
+            for private_key_ring in private_key_rings:
+                if private_key_ring.get_user_id() == logged_user.email:
+
+                    for i, d in enumerate(private_key_ring.user_keys):
+                        rec_key_id_int = int(recipient_key_id.decode('utf-8'))
+                        if d.get('key_id') == rec_key_id_int:
+                            enc_private_key = d.get('private_key')
+                            index = i
+                            break
+
+            private_key = private_key_decrypt(enc_private_key, index)
+
+            # DEKRIPCIJA
+
+            session_key_plaintext = private_key.decrypt(
+                enc_session_key,
+                padding.OAEP(
+                    mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                    algorithm=hashes.SHA256(),
+                    label=None
+                )
+            )
+
+
+            cipher = DES3.new(session_key_plaintext, DES3.MODE_CBC)
+            iv = cipher.iv
+            cipher_decrypt = DES3.new(session_key_plaintext, DES3.MODE_CBC, iv=iv)
+            plaintext = unpad(cipher_decrypt.decrypt(enc_message), DES3.block_size)
+
+            print(plaintext)
+        else:
+            print("No session key component found.")
+
+
     # AUTENTIKACIJA
 
-    found = False
-    public_key = None
-
-    for ring in private_key_rings:
-        if ring.user_id == message.sender_id:
-            for elem in ring.user_keys:
-                if elem["key_id"] == message.public_key_id:
-                    public_key = elem["public_key"]
-                    found = True
-                    break
-
-            if found:
-                break
-
-    digest = hashes.Hash(hashes.SHA1())
-    digest.update(message)
-    hash_code = digest.finalize()
+    # found = False
+    # public_key = None
+    #
+    # for ring in private_key_rings:
+    #     if ring.user_id == message.sender_id:
+    #         for elem in ring.user_keys:
+    #             if elem["key_id"] == message.public_key_id:
+    #                 public_key = elem["public_key"]
+    #                 found = True
+    #                 break
+    #
+    #         if found:
+    #             break
+    #
+    # digest = hashes.Hash(hashes.SHA1())
+    # digest.update(message)
+    # hash_code = digest.finalize()
 
     # 3. Verifikacija potpisa pomoću javnog ključa
-    try:
-        public_key.verify(
-            message.signature,
-            hash_code,
-            padding.PKCS1v15(),
-            hashes.SHA1()
-        )
-        print("Potpis je validan. Poruka je autentična.")
-    except Exception as e:
-        print("Potpis nije validan. Poruka možda nije autentična ili je izmenjena.")
+    # try:
+    #     public_key.verify(
+    #         message.signature,
+    #         hash_code,
+    #         padding.PKCS1v15(),
+    #         hashes.SHA1()
+    #     )
+    #     print("Potpis je validan. Poruka je autentična.")
+    # except Exception as e:
+    #     print("Potpis nije validan. Poruka možda nije autentična ili je izmenjena.")
 
 
 def import_keys_action(filepath):

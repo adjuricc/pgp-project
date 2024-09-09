@@ -383,8 +383,17 @@ class AppGUI:
             self.signature_radio2.config(state=tk.DISABLED)
             self.signature_option_menu.config(state=tk.DISABLED)
 
+    def set_receive_message_action(self, callback):
+        self.receive_message_callback = callback
+
+    def handle_receive_message(self):
+        if self.receive_message_callback:
+            self.receive_message_callback()
+
+
     def receive_message_page(self):
         print("receive page")
+        self.handle_receive_message()
 
     def set_import_action(self, callback):
         self.import_callback = callback
