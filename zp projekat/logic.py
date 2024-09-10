@@ -28,6 +28,8 @@ public_key_rings = []
 logged_user = None
 num_of_exports = []
 ivs = []
+
+tripledes_iv = None
 def register_action(username, email, password, set_status):
     global logged_user
     print("Register button clicked")
@@ -214,19 +216,20 @@ def get_public_key_ring(set_status):
         return keys
     return None
 
-def send_message_action(filename, encryption_var, signature_var, compress_var, radix64_var, encryption_option, signature_option, enc_input, signature_input, message, set_status):
+def send_message_action(filename, file_path, encryption_var, signature_var, compress_var, radix64_var, encryption_option, signature_option, enc_input, signature_input, message, set_status):
     global logged_user
     global ivs
+    global tripledes_iv
 
     public_key_id = None
     signature = None
 
     if logged_user is None:
         set_status("User must be logged in. ")
-    elif filename.get() is None:
+    elif filename.get() is None or file_path.get() is None:
         set_status("Fields with * are mandatory. ")
     else:
-
+        file_path_string = file_path.get() + "\\" + filename.get()
         # napravimo message koji se sastoji od filename, timestamp i data
         msg = {
             "filename": filename.get(),
@@ -273,10 +276,12 @@ def send_message_action(filename, encryption_var, signature_var, compress_var, r
             cipher = CAST.new(cast_key, CAST.MODE_CBC, iv)
 
             private_key_input = None
+            key_id_sender = None
 
             for key in private_key_rings:
                 if key.user_id == logged_user.email:
                     private_key_input = key.user_keys[key_index]["private_key"]
+                    key_id_sender = key.user_keys[key_index]["key_id"]
                     break
 
             decrypted_private_key_padded = cipher.decrypt(private_key_input)
@@ -367,11 +372,6 @@ def send_message_action(filename, encryption_var, signature_var, compress_var, r
 
                                 #message_bytes = (json.dumps(msg)).encode('utf-8')
 
-                                current_directory = os.path.dirname(os.path.abspath(__file__))
-                                user_directory = os.path.join(current_directory, user.username)
-                                export_directory = os.path.join(user_directory, "receive")
-                                file_path = os.path.join(export_directory, filename.get())
-
                                 # triple des alg
                                 if encryption_option.get() == 1:
                                     print("TripleDES")
@@ -379,6 +379,7 @@ def send_message_action(filename, encryption_var, signature_var, compress_var, r
                                     cipher = DES3.new(session_key, DES3.MODE_CBC)
 
                                     iv = cipher.iv  # Initialization Vector (IV)
+                                    tripledes_iv = iv
                                     ciphertext = cipher.encrypt(pad(message_bytes, DES3.block_size))
                                 elif encryption_option.get() == 2:
                                     print("AES128")
@@ -390,54 +391,55 @@ def send_message_action(filename, encryption_var, signature_var, compress_var, r
 
                                     print(f'Ciphertext: {ciphertext.hex()}')
 
+        with open(file_path_string, mode='wb') as file:
+            if signature is not None: # nece uci ako enc nije cekirano
+                file.write("signature".encode('utf-8'))
+                file.write(b"\n")
+                encoded_signature = base64.b64encode(signature)
+                file.write(encoded_signature)
+                file.write(b"\n")
+            if public_key_id is not None:
+                file.write("keyID".encode('utf-8'))
+                file.write(b"\n")
+                file.write(str(public_key_id).encode('utf-8'))
+                file.write(b"\n")
 
-                                    current_directory = os.path.dirname(os.path.abspath(__file__))
-                                    user_directory = os.path.join(current_directory, user.username)
-                                    export_directory = os.path.join(user_directory, "receive")
-                                    file_path = os.path.join(export_directory, filename.get())
+            file.write("message".encode('utf-8'))
+            file.write(b"\n")
+            if encryption_option.get() == 1 or encryption_option.get() == 2:
+                encoded_ciphertext = base64.b64encode(ciphertext)
+                file.write(encoded_ciphertext)
+            else:
+                encoded_message_bytes = base64.b64encode(message_bytes)
+                file.write(encoded_message_bytes)
 
-                                with open(file_path, mode='wb') as file:
-                                    if signature is not None: # nece uci ako enc nije cekirano
-                                        file.write("signature".encode('utf-8'))
-                                        file.write(b"\n")
-                                        file.write(signature)
-                                        file.write(b"\n")
-                                    if public_key_id is not None:
-                                        file.write("keyID".encode('utf-8'))
-                                        file.write(b"\n")
-                                        file.write(str(public_key_id).encode('utf-8'))
-                                        file.write(b"\n")
+            file.write(b"\n")
 
-                                    file.write("message".encode('utf-8'))
-                                    file.write(b"\n")
-                                    if encryption_option.get() == 1 or encryption_option.get() == 2:
-                                        #encoded_ciphertext = base64.b64encode(ciphertext)
-                                        file.write(ciphertext)
-                                    else:
-                                        file.write(message_bytes)
+            file.write("encryption algorithm".encode('utf-8'))
+            file.write(b"\n")
 
-                                    file.write(b"\n")
+            if encryption_option.get() == 1:
+                file.write("TripleDES".encode('utf-8'))
+                file.write(b"\n")
+            elif encryption_option.get() == 2:
+                file.write("AES128".encode('utf-8'))
+                file.write(b"\n")
 
-                                    file.write("encryption algorithm".encode('utf-8'))
-                                    file.write(b"\n")
+            file.write("session key component".encode('utf-8'))
+            file.write(b"\n")
+            encoded_session_key = base64.b64encode(session_key_ciphertxt)
+            file.write(encoded_session_key)
+            file.write(b"\n")
 
-                                    if encryption_option.get() == 1:
-                                        file.write("TripleDES".encode('utf-8'))
-                                        file.write(b"\n")
-                                    elif encryption_option.get() == 2:
-                                        file.write("AES128".encode('utf-8'))
-                                        file.write(b"\n")
+            file.write("recipient key id".encode('utf-8'))
+            file.write(b"\n")
+            file.write(str(recipient_key_id).encode('utf-8'))
+            file.write(b"\n")
 
-                                    file.write("session key component".encode('utf-8'))
-                                    file.write(b"\n")
-                                    encoded_session_key = base64.b64encode(session_key_ciphertxt)
-                                    file.write(encoded_session_key)
-                                    file.write(b"\n")
-
-                                    file.write("recipient key id".encode('utf-8'))
-                                    file.write(b"\n")
-                                    file.write(str(recipient_key_id).encode('utf-8'))
-                                    file.write(b"\n")
+            file.write("sender key id".encode('utf-8'))
+            file.write(b"\n")
+            file.write(str(key_id_sender).encode('utf-8'))
+            file.write(b"\n")
 
 
 def private_key_decrypt(enc_private_key, index):
@@ -475,20 +477,18 @@ def private_key_decrypt(enc_private_key, index):
     return private_key
 
 
-def receive_msg_action(message):
+def receive_msg_action(file_path, save_file_path):
     # kad korisnik prima poruku
     global logged_user
-    current_directory = os.path.dirname(os.path.abspath(__file__))
-    user_directory = os.path.join(current_directory, logged_user.username)
-    export_directory = os.path.join(user_directory, "receive")
-    file_path = os.path.join(export_directory, "to_a1.txt") # ne sme da bude hardkodovano!!
-
+    global tripledes_iv
     # provera da li je odradjena tajnost
 
     enc_message = None
     enc_session_key = None
     recipient_key_id = None
     alg = None
+    signature = None
+    sender_key_id = None
 
     with open(file_path, mode='rb') as file:
         lines = file.readlines()
@@ -508,6 +508,13 @@ def receive_msg_action(message):
 
             if b"encryption algorithm" in line:
                 alg = lines[i + 1].strip().decode('utf-8')
+
+            if b"signature" in line:
+                signature = base64.b64decode(lines[i + 1].strip())
+
+            if b"sender key id" in line:
+                sender_key_id = base64.b64decode(lines[i + 1].strip())
+
 
         if enc_message:
             print(f"Message (ciphertext): {enc_message}")
@@ -541,55 +548,59 @@ def receive_msg_action(message):
                 )
             )
 
-            if alg == "TripleDES":
-                cipher = DES3.new(session_key_plaintext, DES3.MODE_CBC)
-                iv = cipher.iv
-                cipher_decrypt = DES3.new(session_key_plaintext, DES3.MODE_CBC, iv=iv)
-                plaintext = unpad(cipher_decrypt.decrypt(enc_message), DES3.block_size)
+            plaintext = None
 
-                print(plaintext)
+            if alg == "TripleDES":
+                if tripledes_iv is not None:
+                    cipher_decrypt = DES3.new(session_key_plaintext, DES3.MODE_CBC, iv=tripledes_iv)
+                    plaintext = unpad(cipher_decrypt.decrypt(enc_message), DES3.block_size)
+
+                    print(plaintext)
             elif alg == "AES128":
                 decipher = AES.new(session_key_plaintext, AES.MODE_ECB)
                 decrypted_padded_plaintext = decipher.decrypt(enc_message)
-                decrypted_plaintext = unpad(decrypted_padded_plaintext, AES.block_size)
+                plaintext = unpad(decrypted_padded_plaintext, AES.block_size)
 
-                print(f'Decrypted Plaintext: {decrypted_plaintext.decode()}')
+                print(f'Decrypted Plaintext: {plaintext.decode()}')
         else:
             print("No session key component found.")
 
 
-    # AUTENTIKACIJA
+    if signature:
+        #AUTENTIKACIJA
 
-    # found = False
-    # public_key = None
-    #
-    # for ring in private_key_rings:
-    #     if ring.user_id == message.sender_id:
-    #         for elem in ring.user_keys:
-    #             if elem["key_id"] == message.public_key_id:
-    #                 public_key = elem["public_key"]
-    #                 found = True
-    #                 break
-    #
-    #         if found:
-    #             break
-    #
-    # digest = hashes.Hash(hashes.SHA1())
-    # digest.update(message)
-    # hash_code = digest.finalize()
+        found = False
+        public_key = None
 
-    # 3. Verifikacija potpisa pomoću javnog ključa
-    # try:
-    #     public_key.verify(
-    #         message.signature,
-    #         hash_code,
-    #         padding.PKCS1v15(),
-    #         hashes.SHA1()
-    #     )
-    #     print("Potpis je validan. Poruka je autentična.")
-    # except Exception as e:
-    #     print("Potpis nije validan. Poruka možda nije autentična ili je izmenjena.")
+        for ring in public_key_rings:
+            for elem in ring.user_keys:
+                if elem["key_id"] == sender_key_id:
+                    public_key = elem["public_key"]
+                    found = True
+                    break
 
+            if found:
+                break
+
+        digest = hashes.Hash(hashes.SHA1())
+        digest.update(enc_message)
+        hash_code = digest.finalize()
+
+        #3. Verifikacija potpisa pomoću javnog ključa
+        try:
+            public_key.verify(
+                signature,
+                hash_code,
+                padding.PKCS1v15(),
+                hashes.SHA1()
+            )
+            print("Potpis je validan. Poruka je autentična.")
+        except Exception as e:
+            print("Potpis nije validan. Poruka možda nije autentična ili je izmenjena.")
+
+    with open(save_file_path.get(), mode='wb') as file:
+        decoded_message = plaintext.decode('utf-8')
+        file.write(json.loads(decoded_message)["data"].encode('utf-8'))
 
 def import_keys_action(filepath):
     print("Import keys button clicked")

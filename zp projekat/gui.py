@@ -303,7 +303,7 @@ class AppGUI:
 
     def handle_send_message(self):
         if self.send_message_callback:
-            self.send_message_callback(self.filename_input, self.encryption_var, self.signature_var, self.compress_var, self.radix64_var, self.encryption_option, self.signature_option, self.enc_input, self.signature_option_var.get(), self.message)
+            self.send_message_callback(self.filename_input, self.file_path,self.encryption_var, self.signature_var, self.compress_var, self.radix64_var, self.encryption_option, self.signature_option, self.enc_input, self.signature_option_var.get(), self.message)
 
     def send_message_page(self):
         self.clear_main()
@@ -312,9 +312,13 @@ class AppGUI:
         self.filename_label.grid(row=1, column=0, padx=5, pady=15, sticky=tk.E)
         self.filename_input = tk.Entry(self.main)
         self.filename_input.grid(row=1, column=1, padx=5, pady=15, sticky=tk.W)
+        self.filepath_label = tk.Label(self.main, text="* Filepath:")
+        self.filepath_label.grid(row=2, column=0, padx=5, pady=15, sticky=tk.E)
+        self.file_path = tk.Entry(self.main)
+        self.file_path.grid(row=2, column=1, padx=5, pady=15, sticky=tk.W)
 
         self.options_label = tk.Label(self.main, text="Options:")
-        self.options_label.grid(row=2, column=0, padx=5, pady=15, sticky=tk.E)
+        self.options_label.grid(row=3, column=0, padx=5, pady=15, sticky=tk.E)
 
         self.encryption_var = tk.BooleanVar()
         self.signature_var = tk.BooleanVar()
@@ -395,12 +399,29 @@ class AppGUI:
 
     def handle_receive_message(self):
         if self.receive_message_callback:
-            self.receive_message_callback()
+            self.receive_message_callback(self.file_path_receive, self.save_file_path)
 
+    def open_dialog(self):
+        self.file_path_receive = filedialog.askopenfilename(
+            title="Izaberi fajl",
+            filetypes=[("Tekstualni fajlovi", "*.txt"), ("Svi fajlovi", "*.*")]
+        )
 
     def receive_message_page(self):
+        self.clear_main()
         print("receive page")
-        self.handle_receive_message()
+
+        self.choose_file_button = tk.Button(self.main, text="Choose file", command=self.open_dialog)
+        self.choose_file_button.grid(row=1, column=0, padx=10, pady=15, sticky=tk.E)
+
+        self.save_file_path_label = tk.Label(self.main, text="* Filepath:")
+        self.save_file_path_label.grid(row=2, column=0, padx=5, pady=15, sticky=tk.E)
+        self.save_file_path = tk.Entry(self.main)
+        self.save_file_path.grid(row=2, column=1, padx=5, pady=15, sticky=tk.W)
+
+        self.receive_button = tk.Button(self.main, text="Receive message", command=self.handle_receive_message)
+        self.receive_button.grid(row=3, column=0, padx=10, pady=15, sticky=tk.E)
+
 
     def set_import_action(self, callback):
         self.import_callback = callback
