@@ -315,12 +315,6 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
 
         message_bytes = (json.dumps(msg)).encode('utf-8')
 
-        if compress_var.get():
-            message_bytes = zlib.compress(message_bytes)
-
-        if radix64_var.get():
-            message_bytes = base64.b64encode(message_bytes)
-
         if encryption_var.get():
             if enc_input.get() is None:
                 set_status("Please input user id for encryption. ")
@@ -391,17 +385,38 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
 
                                     print(f'Ciphertext: {ciphertext.hex()}')
 
+
+        if compress_var.get():
+            if encryption_option.get() == 1 or encryption_option.get() == 2:
+                ciphertext = zlib.compress(ciphertext)
+            else:
+                print("pre compress")
+                print(message_bytes)
+                message_bytes = zlib.compress(message_bytes)
+                print("post compress")
+                print(message_bytes)
+
+            if signature_var.get():
+                signature = zlib.compress(signature)
+
+        if radix64_var.get():
+            message_bytes = base64.b64encode(message_bytes)
+
         with open(file_path_string, mode='wb') as file:
-            if signature is not None: # nece uci ako enc nije cekirano
+            if compress_var.get():
+                file.write("zip compress".encode('utf-8'))
+                file.write(b"\n")
+
+            if signature is not None:
                 file.write("signature".encode('utf-8'))
                 file.write(b"\n")
                 encoded_signature = base64.b64encode(signature)
                 file.write(encoded_signature)
                 file.write(b"\n")
-            if public_key_id is not None:
-                file.write("keyID".encode('utf-8'))
+
+                file.write("sender key id".encode('utf-8'))
                 file.write(b"\n")
-                file.write(str(public_key_id).encode('utf-8'))
+                file.write(str(key_id_sender).encode('utf-8'))
                 file.write(b"\n")
 
             file.write("message".encode('utf-8'))
@@ -409,37 +424,35 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
             if encryption_option.get() == 1 or encryption_option.get() == 2:
                 encoded_ciphertext = base64.b64encode(ciphertext)
                 file.write(encoded_ciphertext)
+                file.write(b"\n")
+
+                file.write("encryption algorithm".encode('utf-8'))
+                file.write(b"\n")
+
+                if encryption_option.get() == 1:
+                    file.write("TripleDES".encode('utf-8'))
+                    file.write(b"\n")
+                elif encryption_option.get() == 2:
+                    file.write("AES128".encode('utf-8'))
+                    file.write(b"\n")
+
+                file.write("session key component".encode('utf-8'))
+                file.write(b"\n")
+                encoded_session_key = base64.b64encode(session_key_ciphertxt)
+                file.write(encoded_session_key)
+                file.write(b"\n")
+
+                file.write("recipient key id".encode('utf-8'))
+                file.write(b"\n")
+                file.write(str(recipient_key_id).encode('utf-8'))
+                file.write(b"\n")
+
             else:
                 encoded_message_bytes = base64.b64encode(message_bytes)
                 file.write(encoded_message_bytes)
-
-            file.write(b"\n")
-
-            file.write("encryption algorithm".encode('utf-8'))
-            file.write(b"\n")
-
-            if encryption_option.get() == 1:
-                file.write("TripleDES".encode('utf-8'))
-                file.write(b"\n")
-            elif encryption_option.get() == 2:
-                file.write("AES128".encode('utf-8'))
                 file.write(b"\n")
 
-            file.write("session key component".encode('utf-8'))
-            file.write(b"\n")
-            encoded_session_key = base64.b64encode(session_key_ciphertxt)
-            file.write(encoded_session_key)
-            file.write(b"\n")
 
-            file.write("recipient key id".encode('utf-8'))
-            file.write(b"\n")
-            file.write(str(recipient_key_id).encode('utf-8'))
-            file.write(b"\n")
-
-            file.write("sender key id".encode('utf-8'))
-            file.write(b"\n")
-            file.write(str(key_id_sender).encode('utf-8'))
-            file.write(b"\n")
 
 
 def private_key_decrypt(enc_private_key, index):
@@ -489,13 +502,20 @@ def receive_msg_action(file_path, save_file_path):
     alg = None
     signature = None
     sender_key_id = None
+    compress_zip = False
 
     with open(file_path, mode='rb') as file:
         lines = file.readlines()
 
         for i, line in enumerate(lines):
+
+            if b"zip compress" in line:
+                compress_zip = True
+
             if b"message" in line:
                 enc_message = base64.b64decode(lines[i + 1].strip())
+                if compress_zip is True:
+                    enc_message = zlib.decompress(enc_message)
 
             if b"session key component" in line:
                 enc_session_key = base64.b64decode(lines[i + 1].strip())
@@ -513,13 +533,22 @@ def receive_msg_action(file_path, save_file_path):
                 signature = base64.b64decode(lines[i + 1].strip())
 
             if b"sender key id" in line:
-                sender_key_id = base64.b64decode(lines[i + 1].strip())
+                sender_key_id = lines[i + 1].strip()
+                sender_key_id_str = sender_key_id.decode('utf-8')
+
+                sender_key_id_int = int(sender_key_id_str)
 
 
         if enc_message:
             print(f"Message (ciphertext): {enc_message}")
         else:
             print("No message found.")
+
+        # if compress_zip:
+        #     if enc_message:
+        #         enc_message = zlib.decompress(enc_message)
+        #     if signature:
+        #         signature = zlib.decompress(signature)
 
         if enc_session_key:
             enc_private_key = None
@@ -563,40 +592,41 @@ def receive_msg_action(file_path, save_file_path):
 
                 print(f'Decrypted Plaintext: {plaintext.decode()}')
         else:
-            print("No session key component found.")
+            plaintext = enc_message
+            print("PLAINTEXT")
+            print(plaintext)
 
+        if signature:
+            #AUTENTIKACIJA
 
-    if signature:
-        #AUTENTIKACIJA
+            found = False
+            public_key = None
 
-        found = False
-        public_key = None
+            for ring in public_key_rings:
+                for elem in ring.user_keys:
+                    if elem["key_id"] == sender_key_id_int:
+                        public_key = elem["public_key"]
+                        found = True
+                        break
 
-        for ring in public_key_rings:
-            for elem in ring.user_keys:
-                if elem["key_id"] == sender_key_id:
-                    public_key = elem["public_key"]
-                    found = True
+                if found:
                     break
 
-            if found:
-                break
+            digest = hashes.Hash(hashes.SHA1())
+            digest.update(enc_message)
+            hash_code = digest.finalize()
 
-        digest = hashes.Hash(hashes.SHA1())
-        digest.update(enc_message)
-        hash_code = digest.finalize()
-
-        #3. Verifikacija potpisa pomoću javnog ključa
-        try:
-            public_key.verify(
-                signature,
-                hash_code,
-                padding.PKCS1v15(),
-                hashes.SHA1()
-            )
-            print("Potpis je validan. Poruka je autentična.")
-        except Exception as e:
-            print("Potpis nije validan. Poruka možda nije autentična ili je izmenjena.")
+            #3. Verifikacija potpisa pomoću javnog ključa
+            try:
+                public_key.verify(
+                    signature,
+                    hash_code,
+                    padding.PKCS1v15(),
+                    hashes.SHA1()
+                )
+                print("Potpis je validan. Poruka je autentična.")
+            except Exception as e:
+                print("Potpis nije validan. Poruka možda nije autentična ili je izmenjena.")
 
     with open(save_file_path.get(), mode='wb') as file:
         decoded_message = plaintext.decode('utf-8')
