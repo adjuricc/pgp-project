@@ -110,6 +110,10 @@ def generate_key_pair_action(key_size, set_status):
         set_status("User must be logged in. ")
     else:
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=key_size)
+
+        print("PRIVATE KEY")
+        print(private_key)
+
         public_key = private_key.public_key()
         logged_user.add_key_pair(private_key, public_key)
 
@@ -157,8 +161,14 @@ def generate_key_pair_action(key_size, set_status):
 
                 cast_key = hash_value[:16]  # CAST-128 ključ mora biti između 5 i 16 bajtova
 
+                print("CAST KEY GENERATE")
+                print(cast_key)
+
                 # Generisanje vektora inicijalizacije (IV)
                 iv = get_random_bytes(8)  # CAST-128 koristi 8-bajtni IV
+
+                print("IV GENERATE")
+                print(iv)
 
                 for elem in ivs:
                     if elem.user_id == logged_user.email:
@@ -175,11 +185,17 @@ def generate_key_pair_action(key_size, set_status):
                     encryption_algorithm=serialization.NoEncryption()
                 )
 
+                print("PRIVATE KEY GENERATE")
+                print(private_key_bytes)
+
                 # Padding podataka (CAST-128 koristi blokove od 8 bajtova)
                 padded_data = pad(private_key_bytes, CAST.block_size)
 
                 # Korak 3: Šifrovanje privatnog ključa
                 encrypted_private_key = cipher.encrypt(padded_data)
+
+                print("ENCRYPTED PRIVATE KEY GENERATE")
+                print(encrypted_private_key)
 
                 key.add_key(time.time(), key_id, public_key, encrypted_private_key)
 
@@ -244,14 +260,21 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
 
             # Dodavanje podataka koje želite da heširate
             message_bytes = (json.dumps(msg)).encode('utf-8')
+            print("Message bytes send")
+            print(message_bytes)
+            print("Length send")
+            print(len(message_bytes))
             digest.update(message_bytes)
 
             # Dobijanje heš vrednosti
             hashed_message = digest.finalize()
+            print("Send")
+            print(hashed_message)
 
             #DEKRIPTOVANJE PRIVATNOG KLJUCA
 
             key_index = int(signature_input.split(" ")[2])
+            print(key_index)
 
             # Kreiranje SHA-1 objekta
             digest = hashes.Hash(hashes.SHA1())
@@ -264,15 +287,20 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
 
             cast_key = hash_value[:16]  # CAST-128 ključ mora biti između 5 i 16 bajtova
 
+            print("CAST KEY SEND")
+            print(cast_key)
+
             # Generisanje vektora inicijalizacije (IV)
             iv = None
 
             for elem in ivs:
                 if elem.user_id == logged_user.email:
                     iv = elem.values[key_index]
+                    print("IV SEND")
+                    print(iv)
                     break
 
-            # Kreiranje CAST-128 objekta za šifrovanje
+            # Kreiranje CAST-128 objekta za dešifrovanje
             cipher = CAST.new(cast_key, CAST.MODE_CBC, iv)
 
             private_key_input = None
@@ -283,6 +311,9 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
                     private_key_input = key.user_keys[key_index]["private_key"]
                     key_id_sender = key.user_keys[key_index]["key_id"]
                     break
+
+            print("ENCRYPTED PRIVATE KEY SEND")
+            print(private_key_input)
 
             decrypted_private_key_padded = cipher.decrypt(private_key_input)
 
@@ -295,10 +326,26 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
                 password=None
             )
 
+            decrypted_private_key_bytes = private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption()
+            )
+
+            print("PRIVATE KEY SEND")
+            print(decrypted_private_key_bytes)
+
+
+            print("SEND PRIVATE KEY")
+            print(private_key)
+
             signature = private_key.sign(
-                hashed_message,
-                padding.PKCS1v15(),
-                hashes.SHA1()
+                message_bytes,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
             )
 
             found = False
@@ -366,6 +413,9 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
 
                                 #message_bytes = (json.dumps(msg)).encode('utf-8')
 
+                                if signature_var.get():
+                                    signature_message = {"message": msg, "signature": signature}
+
                                 # triple des alg
                                 if encryption_option.get() == 1:
                                     print("TripleDES")
@@ -374,14 +424,22 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
 
                                     iv = cipher.iv  # Initialization Vector (IV)
                                     tripledes_iv = iv
-                                    ciphertext = cipher.encrypt(pad(message_bytes, DES3.block_size))
+                                    if signature_var.get():
+                                        signature_message_bytes = (json.dumps(signature_message)).encode('utf-8')
+                                        ciphertext = cipher.encrypt(pad(signature_message_bytes, DES3.block_size))
+                                    else:
+                                        ciphertext = cipher.encrypt(pad(message_bytes, DES3.block_size))
                                 elif encryption_option.get() == 2:
                                     print("AES128")
 
                                     cipher = AES.new(session_key, AES.MODE_ECB)
-
-                                    padded_plaintext = pad(message_bytes, AES.block_size)
-                                    ciphertext = cipher.encrypt(padded_plaintext)
+                                    if signature_var.get():
+                                        signature_message_bytes = (json.dumps(signature_message)).encode('utf-8')
+                                        padded_plaintext = pad(signature_message_bytes, AES.block_size)
+                                        ciphertext = cipher.encrypt(padded_plaintext)
+                                    else:
+                                        padded_plaintext = pad(message_bytes, AES.block_size)
+                                        ciphertext = cipher.encrypt(padded_plaintext)
 
                                     print(f'Ciphertext: {ciphertext.hex()}')
 
@@ -410,6 +468,8 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
             if signature is not None:
                 file.write("signature".encode('utf-8'))
                 file.write(b"\n")
+                print("SIGNATURE SEND")
+                print(signature)
                 encoded_signature = base64.b64encode(signature)
                 file.write(encoded_signature)
                 file.write(b"\n")
@@ -451,8 +511,6 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
                 encoded_message_bytes = base64.b64encode(message_bytes)
                 file.write(encoded_message_bytes)
                 file.write(b"\n")
-
-
 
 
 def private_key_decrypt(enc_private_key, index):
@@ -603,7 +661,7 @@ def receive_msg_action(file_path, save_file_path):
             public_key = None
 
             for ring in public_key_rings:
-                for elem in ring.user_keys:
+                for elem in ring.keys:
                     if elem["key_id"] == sender_key_id_int:
                         public_key = elem["public_key"]
                         found = True
@@ -613,24 +671,47 @@ def receive_msg_action(file_path, save_file_path):
                     break
 
             digest = hashes.Hash(hashes.SHA1())
+
+            # Dodavanje podataka koje želite da heširate
+            print("Message bytes receive")
+            print(enc_message)
+            print("Length receive")
+            print(len(enc_message))
             digest.update(enc_message)
-            hash_code = digest.finalize()
+
+            # Dobijanje heš vrednosti
+            hashed_message = digest.finalize()
+
+            print("Receive")
+            print(hashed_message)
+
+            print("SIGNATURE RECEIVE")
+            print(signature)
+
+            print("PUBLIC KEY RECEIVE")
+            print(public_key)
 
             #3. Verifikacija potpisa pomoću javnog ključa
             try:
-                public_key.verify(
+                public_key.public_key().verify(
                     signature,
-                    hash_code,
-                    padding.PKCS1v15(),
-                    hashes.SHA1()
+                    enc_message,
+                    padding.PSS(
+                        mgf=padding.MGF1(hashes.SHA256()),
+                        salt_length=padding.PSS.MAX_LENGTH
+                    ),
+                    hashes.SHA256()
                 )
                 print("Potpis je validan. Poruka je autentična.")
+                with open(save_file_path.get(), mode='wb') as file:
+                    decoded_message = plaintext.decode('utf-8')
+                    file.write(json.loads(decoded_message)["data"].encode('utf-8'))
             except Exception as e:
+                print(f"Tip izuzetka: {type(e).__name__}")
+                print(f"Poruka izuzetka: {e}")
                 print("Potpis nije validan. Poruka možda nije autentična ili je izmenjena.")
 
-    with open(save_file_path.get(), mode='wb') as file:
-        decoded_message = plaintext.decode('utf-8')
-        file.write(json.loads(decoded_message)["data"].encode('utf-8'))
+
 
 def import_keys_action(filepath):
     print("Import keys button clicked")
