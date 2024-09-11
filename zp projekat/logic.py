@@ -260,21 +260,14 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
 
             # Dodavanje podataka koje želite da heširate
             message_bytes = (json.dumps(msg)).encode('utf-8')
-            print("Message bytes send")
-            print(message_bytes)
-            print("Length send")
-            print(len(message_bytes))
             digest.update(message_bytes)
 
             # Dobijanje heš vrednosti
             hashed_message = digest.finalize()
-            print("Send")
-            print(hashed_message)
 
             #DEKRIPTOVANJE PRIVATNOG KLJUCA
 
             key_index = int(signature_input.split(" ")[2])
-            print(key_index)
 
             # Kreiranje SHA-1 objekta
             digest = hashes.Hash(hashes.SHA1())
@@ -287,8 +280,6 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
 
             cast_key = hash_value[:16]  # CAST-128 ključ mora biti između 5 i 16 bajtova
 
-            print("CAST KEY SEND")
-            print(cast_key)
 
             # Generisanje vektora inicijalizacije (IV)
             iv = None
@@ -296,8 +287,6 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
             for elem in ivs:
                 if elem.user_id == logged_user.email:
                     iv = elem.values[key_index]
-                    print("IV SEND")
-                    print(iv)
                     break
 
             # Kreiranje CAST-128 objekta za dešifrovanje
@@ -311,9 +300,6 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
                     private_key_input = key.user_keys[key_index]["private_key"]
                     key_id_sender = key.user_keys[key_index]["key_id"]
                     break
-
-            print("ENCRYPTED PRIVATE KEY SEND")
-            print(private_key_input)
 
             decrypted_private_key_padded = cipher.decrypt(private_key_input)
 
@@ -331,13 +317,6 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
                 format=serialization.PrivateFormat.TraditionalOpenSSL,
                 encryption_algorithm=serialization.NoEncryption()
             )
-
-            print("PRIVATE KEY SEND")
-            print(decrypted_private_key_bytes)
-
-
-            print("SEND PRIVATE KEY")
-            print(private_key)
 
             signature = private_key.sign(
                 message_bytes,
@@ -371,8 +350,6 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
 
                 user_id = None
 
-                print(private_key_rings)
-
                 for private_key_ring in private_key_rings:
                     for key in private_key_ring.user_keys:
                         if key["key_id"] == int(public_key_input):
@@ -383,8 +360,6 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
                     set_status("Invalid format for user id. ")
                 else:
                     for user in users:
-                        print(user.email)
-                        print(user_id)
                         if user.email == user_id:
                             # treba da proverimo da li ima generisan par kljuceva uopste
                             if len(user.my_keys) == 0:
@@ -412,9 +387,14 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
                                 recipient_key_id = recipient_public_key_int & ((1 << 64) - 1)
 
                                 #message_bytes = (json.dumps(msg)).encode('utf-8')
-
+                                signature_message_bytes = None
                                 if signature_var.get():
-                                    signature_message = {"message": msg, "signature": signature}
+                                    signature_message = {
+                                        "message": msg,
+                                        "signature": base64.b64encode(signature).decode('utf-8')
+                                    }
+
+                                    # signature_message_bytes = (json.dumps(signature_message)).encode('utf-8')
 
                                 # triple des alg
                                 if encryption_option.get() == 1:
@@ -448,11 +428,7 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
             if encryption_option.get() == 1 or encryption_option.get() == 2:
                 ciphertext = zlib.compress(ciphertext)
             else:
-                print("pre compress")
-                print(message_bytes)
                 message_bytes = zlib.compress(message_bytes)
-                print("post compress")
-                print(message_bytes)
 
             if signature_var.get():
                 signature = zlib.compress(signature)
@@ -468,11 +444,10 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
             if signature is not None:
                 file.write("signature".encode('utf-8'))
                 file.write(b"\n")
-                print("SIGNATURE SEND")
-                print(signature)
-                encoded_signature = base64.b64encode(signature)
-                file.write(encoded_signature)
-                file.write(b"\n")
+                if encryption_option.get() != 1 and encryption_option.get() != 2:
+                    encoded_signature = base64.b64encode(signature)
+                    file.write(encoded_signature)
+                    file.write(b"\n")
 
                 file.write("sender key id".encode('utf-8'))
                 file.write(b"\n")
@@ -482,7 +457,9 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
             file.write("message".encode('utf-8'))
             file.write(b"\n")
             if encryption_option.get() == 1 or encryption_option.get() == 2:
+                print(ciphertext)
                 encoded_ciphertext = base64.b64encode(ciphertext)
+                print(encoded_ciphertext)
                 file.write(encoded_ciphertext)
                 file.write(b"\n")
 
@@ -561,6 +538,7 @@ def receive_msg_action(file_path, save_file_path):
     signature = None
     sender_key_id = None
     compress_zip = False
+    has_signature = False
 
     with open(file_path, mode='rb') as file:
         lines = file.readlines()
@@ -588,7 +566,9 @@ def receive_msg_action(file_path, save_file_path):
                 alg = lines[i + 1].strip().decode('utf-8')
 
             if b"signature" in line:
-                signature = base64.b64decode(lines[i + 1].strip())
+                has_signature = True
+                if b"sender key id" not in lines[i + 1]:
+                    signature = base64.b64decode(lines[i + 1].strip())
 
             if b"sender key id" in line:
                 sender_key_id = lines[i + 1].strip()
@@ -641,13 +621,20 @@ def receive_msg_action(file_path, save_file_path):
                 if tripledes_iv is not None:
                     cipher_decrypt = DES3.new(session_key_plaintext, DES3.MODE_CBC, iv=tripledes_iv)
                     plaintext = unpad(cipher_decrypt.decrypt(enc_message), DES3.block_size)
-
+                    if has_signature is True:
+                        decoded_message = plaintext.decode('utf-8')
+                        # dict_msg = json.loads(decoded_message)["data"].encode('utf-8')
+                        print(json.loads(decoded_message)["signature"])
+                        signature = base64.b64decode(json.loads(decoded_message)["signature"])
                     print(plaintext)
             elif alg == "AES128":
                 decipher = AES.new(session_key_plaintext, AES.MODE_ECB)
                 decrypted_padded_plaintext = decipher.decrypt(enc_message)
                 plaintext = unpad(decrypted_padded_plaintext, AES.block_size)
-
+                if has_signature is True:
+                    decoded_message = plaintext.decode('utf-8')
+                    dict_msg = json.loads(decoded_message)["data"].encode('utf-8')
+                    signature = base64.b64decode(dict_msg["signature"])
                 print(f'Decrypted Plaintext: {plaintext.decode()}')
         else:
             plaintext = enc_message
@@ -673,23 +660,10 @@ def receive_msg_action(file_path, save_file_path):
             digest = hashes.Hash(hashes.SHA1())
 
             # Dodavanje podataka koje želite da heširate
-            print("Message bytes receive")
-            print(enc_message)
-            print("Length receive")
-            print(len(enc_message))
             digest.update(enc_message)
 
             # Dobijanje heš vrednosti
             hashed_message = digest.finalize()
-
-            print("Receive")
-            print(hashed_message)
-
-            print("SIGNATURE RECEIVE")
-            print(signature)
-
-            print("PUBLIC KEY RECEIVE")
-            print(public_key)
 
             #3. Verifikacija potpisa pomoću javnog ključa
             try:
