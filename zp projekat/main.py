@@ -32,7 +32,7 @@ def on_import_action(filepath):
     return logic.import_keys_action(filepath)
 
 def on_receive_message_action(file_path_receive, save_file_path):
-    return logic.receive_msg_action(file_path_receive, save_file_path)
+    return logic.receive_msg_action(file_path_receive, save_file_path, set_status)
 
 def main():
     global app_gui

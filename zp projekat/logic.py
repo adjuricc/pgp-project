@@ -262,12 +262,21 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
             message_bytes = (json.dumps(msg)).encode('utf-8')
             digest.update(message_bytes)
 
+            print("Message bytes send")
+            print(message_bytes)
+            print("Length send")
+            print(len(message_bytes))
+
             # Dobijanje heš vrednosti
             hashed_message = digest.finalize()
+
+            print("Send hashed message")
+            print(hashed_message)
 
             #DEKRIPTOVANJE PRIVATNOG KLJUCA
 
             key_index = int(signature_input.split(" ")[2])
+            print(key_index)
 
             # Kreiranje SHA-1 objekta
             digest = hashes.Hash(hashes.SHA1())
@@ -279,7 +288,8 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
             hash_value = digest.finalize()
 
             cast_key = hash_value[:16]  # CAST-128 ključ mora biti između 5 i 16 bajtova
-
+            print("CAST KEY SEND")
+            print(cast_key)
 
             # Generisanje vektora inicijalizacije (IV)
             iv = None
@@ -287,6 +297,8 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
             for elem in ivs:
                 if elem.user_id == logged_user.email:
                     iv = elem.values[key_index]
+                    print("IV SEND")
+                    print(iv)
                     break
 
             # Kreiranje CAST-128 objekta za dešifrovanje
@@ -300,6 +312,9 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
                     private_key_input = key.user_keys[key_index]["private_key"]
                     key_id_sender = key.user_keys[key_index]["key_id"]
                     break
+
+            print("ENCRYPTED PRIVATE KEY SEND")
+            print(private_key_input)
 
             decrypted_private_key_padded = cipher.decrypt(private_key_input)
 
@@ -318,6 +333,14 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
                 encryption_algorithm=serialization.NoEncryption()
             )
 
+            print("PRIVATE KEY SEND")
+            print(decrypted_private_key_bytes)
+
+            print("SEND PRIVATE KEY")
+            print(private_key)
+
+
+
             signature = private_key.sign(
                 message_bytes,
                 padding.PSS(
@@ -326,6 +349,7 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
                 ),
                 hashes.SHA256()
             )
+
 
             found = False
 
@@ -349,6 +373,7 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
                 public_key_input = enc_input.get()
 
                 user_id = None
+                print(private_key_rings)
 
                 for private_key_ring in private_key_rings:
                     for key in private_key_ring.user_keys:
@@ -525,7 +550,7 @@ def private_key_decrypt(enc_private_key, index):
     return private_key
 
 
-def receive_msg_action(file_path, save_file_path):
+def receive_msg_action(file_path, save_file_path, set_status):
     # kad korisnik prima poruku
     global logged_user
     global tripledes_iv
@@ -623,9 +648,12 @@ def receive_msg_action(file_path, save_file_path):
                     plaintext = unpad(cipher_decrypt.decrypt(enc_message), DES3.block_size)
                     if has_signature is True:
                         decoded_message = plaintext.decode('utf-8')
-                        # dict_msg = json.loads(decoded_message)["data"].encode('utf-8')
+                        dict_msg = json.dumps(json.loads(decoded_message)["message"]).encode('utf-8')
+                        print("DICT_MSG")
+                        print(dict_msg)
                         print(json.loads(decoded_message)["signature"])
                         signature = base64.b64decode(json.loads(decoded_message)["signature"])
+                    print("PLAINTEXT TIRPLEDES")
                     print(plaintext)
             elif alg == "AES128":
                 decipher = AES.new(session_key_plaintext, AES.MODE_ECB)
@@ -633,8 +661,8 @@ def receive_msg_action(file_path, save_file_path):
                 plaintext = unpad(decrypted_padded_plaintext, AES.block_size)
                 if has_signature is True:
                     decoded_message = plaintext.decode('utf-8')
-                    dict_msg = json.loads(decoded_message)["data"].encode('utf-8')
-                    signature = base64.b64decode(dict_msg["signature"])
+                    dict_msg = json.dumps(json.loads(decoded_message)["message"]).encode('utf-8')
+                    signature = base64.b64decode(json.loads(decoded_message)["signature"])
                 print(f'Decrypted Plaintext: {plaintext.decode()}')
         else:
             plaintext = enc_message
@@ -664,12 +692,20 @@ def receive_msg_action(file_path, save_file_path):
 
             # Dobijanje heš vrednosti
             hashed_message = digest.finalize()
+            print("SIGNATURE RECEIVE")
+            print(signature)
+
+            print("MESSAGE RECEIVE")
+            print(enc_message)
+
+            print("PUBLIC KEY RECEIVE")
+            print(public_key)
 
             #3. Verifikacija potpisa pomoću javnog ključa
             try:
                 public_key.public_key().verify(
                     signature,
-                    enc_message,
+                    dict_msg,
                     padding.PSS(
                         mgf=padding.MGF1(hashes.SHA256()),
                         salt_length=padding.PSS.MAX_LENGTH
@@ -677,10 +713,12 @@ def receive_msg_action(file_path, save_file_path):
                     hashes.SHA256()
                 )
                 print("Potpis je validan. Poruka je autentična.")
+                set_status("The signature is valid. The message is authentic.")
                 with open(save_file_path.get(), mode='wb') as file:
-                    decoded_message = plaintext.decode('utf-8')
+                    decoded_message = dict_msg.decode('utf-8')
                     file.write(json.loads(decoded_message)["data"].encode('utf-8'))
             except Exception as e:
+                set_status("The signature is not valid. The message may not be authentic or has been altered.")
                 print(f"Tip izuzetka: {type(e).__name__}")
                 print(f"Poruka izuzetka: {e}")
                 print("Potpis nije validan. Poruka možda nije autentična ili je izmenjena.")
