@@ -364,6 +364,7 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
                         break
 
         message_bytes = (json.dumps(msg)).encode('utf-8')
+        ciphertext = None
 
         if encryption_var.get():
             if enc_input.get() is None:
@@ -641,13 +642,14 @@ def receive_msg_action(file_path, save_file_path, set_status):
             )
 
             plaintext = None
+            dict_msg = None
 
             if alg == "TripleDES":
                 if tripledes_iv is not None:
                     cipher_decrypt = DES3.new(session_key_plaintext, DES3.MODE_CBC, iv=tripledes_iv)
                     plaintext = unpad(cipher_decrypt.decrypt(enc_message), DES3.block_size)
+                    decoded_message = plaintext.decode('utf-8')
                     if has_signature is True:
-                        decoded_message = plaintext.decode('utf-8')
                         dict_msg = json.dumps(json.loads(decoded_message)["message"]).encode('utf-8')
                         print("DICT_MSG")
                         print(dict_msg)
@@ -659,15 +661,13 @@ def receive_msg_action(file_path, save_file_path, set_status):
                 decipher = AES.new(session_key_plaintext, AES.MODE_ECB)
                 decrypted_padded_plaintext = decipher.decrypt(enc_message)
                 plaintext = unpad(decrypted_padded_plaintext, AES.block_size)
+                decoded_message = plaintext.decode('utf-8')
                 if has_signature is True:
-                    decoded_message = plaintext.decode('utf-8')
                     dict_msg = json.dumps(json.loads(decoded_message)["message"]).encode('utf-8')
                     signature = base64.b64decode(json.loads(decoded_message)["signature"])
                 print(f'Decrypted Plaintext: {plaintext.decode()}')
         else:
-            plaintext = enc_message
-            print("PLAINTEXT")
-            print(plaintext)
+            dict_msg = enc_message
 
         if signature:
             #AUTENTIKACIJA
@@ -722,6 +722,10 @@ def receive_msg_action(file_path, save_file_path, set_status):
                 print(f"Tip izuzetka: {type(e).__name__}")
                 print(f"Poruka izuzetka: {e}")
                 print("Potpis nije validan. Poruka možda nije autentična ili je izmenjena.")
+        else:
+            with open(save_file_path.get(), mode='wb') as file:
+                decoded_message = dict_msg.decode('utf-8')
+                file.write(json.loads(decoded_message)["data"].encode('utf-8'))
 
 
 
