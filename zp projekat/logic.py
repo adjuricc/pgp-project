@@ -32,7 +32,6 @@ ivs = []
 tripledes_iv = None
 def register_action(username, email, password, set_status):
     global logged_user
-    print("Register button clicked")
     email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
     if logged_user is not None:
         set_status("User must be logged out.")
@@ -83,7 +82,6 @@ def register_action(username, email, password, set_status):
 
 def login_action(username, password, set_status):
     global logged_user
-    print("Login button clicked")
     if logged_user is not None:
         set_status("User must be logged out. ")
     elif username == "" or password == "":
@@ -105,19 +103,13 @@ def generate_key_pair_action(key_size, set_status):
     global logged_user
     global ivs
 
-    print("Generate key pair button clicked")
     if logged_user is None:
         set_status("User must be logged in. ")
     else:
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=key_size)
 
-        print("PRIVATE KEY")
-        print(private_key)
-
         public_key = private_key.public_key()
         logged_user.add_key_pair(private_key, public_key)
-
-        #logged_user.print_user()
 
         private_pem = private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
@@ -161,14 +153,8 @@ def generate_key_pair_action(key_size, set_status):
 
                 cast_key = hash_value[:16]  # CAST-128 ključ mora biti između 5 i 16 bajtova
 
-                print("CAST KEY GENERATE")
-                print(cast_key)
-
                 # Generisanje vektora inicijalizacije (IV)
                 iv = get_random_bytes(8)  # CAST-128 koristi 8-bajtni IV
-
-                print("IV GENERATE")
-                print(iv)
 
                 for elem in ivs:
                     if elem.user_id == logged_user.email:
@@ -185,17 +171,11 @@ def generate_key_pair_action(key_size, set_status):
                     encryption_algorithm=serialization.NoEncryption()
                 )
 
-                print("PRIVATE KEY GENERATE")
-                print(private_key_bytes)
-
                 # Padding podataka (CAST-128 koristi blokove od 8 bajtova)
                 padded_data = pad(private_key_bytes, CAST.block_size)
 
                 # Korak 3: Šifrovanje privatnog ključa
                 encrypted_private_key = cipher.encrypt(padded_data)
-
-                print("ENCRYPTED PRIVATE KEY GENERATE")
-                print(encrypted_private_key)
 
                 key.add_key(time.time(), key_id, public_key, encrypted_private_key)
 
@@ -203,7 +183,6 @@ def generate_key_pair_action(key_size, set_status):
 
                 key.print_ring()
 
-        #print(private_pem, public_pem)
 
 def get_private_key_ring(set_status):
     global logged_user
@@ -262,21 +241,12 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
             message_bytes = (json.dumps(msg)).encode('utf-8')
             digest.update(message_bytes)
 
-            print("Message bytes send")
-            print(message_bytes)
-            print("Length send")
-            print(len(message_bytes))
-
             # Dobijanje heš vrednosti
             hashed_message = digest.finalize()
-
-            print("Send hashed message")
-            print(hashed_message)
 
             #DEKRIPTOVANJE PRIVATNOG KLJUCA
 
             key_index = int(signature_input.split(" ")[2])
-            print(key_index)
 
             # Kreiranje SHA-1 objekta
             digest = hashes.Hash(hashes.SHA1())
@@ -287,9 +257,7 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
             # Dobijanje heš vrednosti
             hash_value = digest.finalize()
 
-            cast_key = hash_value[:16]  # CAST-128 ključ mora biti između 5 i 16 bajtova
-            print("CAST KEY SEND")
-            print(cast_key)
+            cast_key = hash_value[:16]
 
             # Generisanje vektora inicijalizacije (IV)
             iv = None
@@ -297,8 +265,6 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
             for elem in ivs:
                 if elem.user_id == logged_user.email:
                     iv = elem.values[key_index]
-                    print("IV SEND")
-                    print(iv)
                     break
 
             # Kreiranje CAST-128 objekta za dešifrovanje
@@ -312,9 +278,6 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
                     private_key_input = key.user_keys[key_index]["private_key"]
                     key_id_sender = key.user_keys[key_index]["key_id"]
                     break
-
-            print("ENCRYPTED PRIVATE KEY SEND")
-            print(private_key_input)
 
             decrypted_private_key_padded = cipher.decrypt(private_key_input)
 
@@ -332,13 +295,6 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
                 format=serialization.PrivateFormat.TraditionalOpenSSL,
                 encryption_algorithm=serialization.NoEncryption()
             )
-
-            print("PRIVATE KEY SEND")
-            print(decrypted_private_key_bytes)
-
-            print("SEND PRIVATE KEY")
-            print(private_key)
-
 
 
             signature = private_key.sign(
@@ -374,7 +330,6 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
                 public_key_input = enc_input.get()
 
                 user_id = None
-                print(private_key_rings)
 
                 for private_key_ring in private_key_rings:
                     for key in private_key_ring.user_keys:
@@ -424,7 +379,6 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
 
                                 # triple des alg
                                 if encryption_option.get() == 1:
-                                    print("TripleDES")
 
                                     cipher = DES3.new(session_key, DES3.MODE_CBC)
 
@@ -436,7 +390,6 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
                                     else:
                                         ciphertext = cipher.encrypt(pad(message_bytes, DES3.block_size))
                                 elif encryption_option.get() == 2:
-                                    print("AES128")
 
                                     cipher = AES.new(session_key, AES.MODE_ECB)
                                     if signature_var.get():
@@ -483,9 +436,7 @@ def send_message_action(filename, file_path, encryption_var, signature_var, comp
             file.write("message".encode('utf-8'))
             file.write(b"\n")
             if encryption_option.get() == 1 or encryption_option.get() == 2:
-                print(ciphertext)
                 encoded_ciphertext = base64.b64encode(ciphertext)
-                print(encoded_ciphertext)
                 file.write(encoded_ciphertext)
                 file.write(b"\n")
 
@@ -651,12 +602,9 @@ def receive_msg_action(file_path, save_file_path, set_status):
                     decoded_message = plaintext.decode('utf-8')
                     if has_signature is True:
                         dict_msg = json.dumps(json.loads(decoded_message)["message"]).encode('utf-8')
-                        print("DICT_MSG")
-                        print(dict_msg)
-                        print(json.loads(decoded_message)["signature"])
                         signature = base64.b64decode(json.loads(decoded_message)["signature"])
-                    print("PLAINTEXT TIRPLEDES")
-                    print(plaintext)
+                    else:
+                        dict_msg = plaintext
             elif alg == "AES128":
                 decipher = AES.new(session_key_plaintext, AES.MODE_ECB)
                 decrypted_padded_plaintext = decipher.decrypt(enc_message)
@@ -665,7 +613,8 @@ def receive_msg_action(file_path, save_file_path, set_status):
                 if has_signature is True:
                     dict_msg = json.dumps(json.loads(decoded_message)["message"]).encode('utf-8')
                     signature = base64.b64decode(json.loads(decoded_message)["signature"])
-                print(f'Decrypted Plaintext: {plaintext.decode()}')
+                else:
+                    dict_msg = plaintext
         else:
             dict_msg = enc_message
 
@@ -692,14 +641,6 @@ def receive_msg_action(file_path, save_file_path, set_status):
 
             # Dobijanje heš vrednosti
             hashed_message = digest.finalize()
-            print("SIGNATURE RECEIVE")
-            print(signature)
-
-            print("MESSAGE RECEIVE")
-            print(enc_message)
-
-            print("PUBLIC KEY RECEIVE")
-            print(public_key)
 
             #3. Verifikacija potpisa pomoću javnog ključa
             try:
@@ -712,7 +653,6 @@ def receive_msg_action(file_path, save_file_path, set_status):
                     ),
                     hashes.SHA256()
                 )
-                print("Potpis je validan. Poruka je autentična.")
                 set_status("The signature is valid. The message is authentic.")
                 with open(save_file_path.get(), mode='wb') as file:
                     decoded_message = dict_msg.decode('utf-8')
@@ -730,7 +670,7 @@ def receive_msg_action(file_path, save_file_path, set_status):
 
 
 def import_keys_action(filepath):
-    print("Import keys button clicked")
+
 
     with open(filepath, "rb") as file:
         key_data = file.read()
@@ -774,7 +714,6 @@ def import_keys_action(filepath):
 
 
 def export_keys_action(username, public_key, private_key, option):
-    print("Export keys button clicked")
 
     private_pem = private_key.private_bytes(
         encoding=serialization.Encoding.PEM,
@@ -796,8 +735,6 @@ def export_keys_action(username, public_key, private_key, option):
             export_directory = os.path.join(user_directory, "export")
             file_path = os.path.join(export_directory, filename)
 
-            print(file_path)
-
             with open(file_path, mode='wb') as file:
                 if option == "Javni i privatni":
                     file.write(private_pem)
@@ -808,7 +745,6 @@ def export_keys_action(username, public_key, private_key, option):
 
 def log_out_action():
     global logged_user
-    print("Log out button clicked")
     logged_user = None
 
 if __name__ == '__main__':
